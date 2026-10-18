@@ -865,6 +865,7 @@ dependencies = [
  "futures-util",
  "mime_guess",
  "rand 0.8.8",
+ "regex",
  "sanitize-filename",
  "serde",
  "serde_json",
