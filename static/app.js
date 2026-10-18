@@ -1,4 +1,4 @@
-// YouTube Music - Synchronized Real-time Player
+// amra-shunbo - Synchronized Real-time Player
 (function () {
   'use strict';
 
@@ -512,7 +512,7 @@
 
         applySyncState(state);
         initVisualizer();
-        showToast(`Connected to YouTube Music room ${room_id}!`, '✨');
+        showToast(`Connected to amra-shunbo room ${room_id}!`, '✨');
         break;
       }
 
