@@ -1,4 +1,4 @@
-// YouTube Music - Synchronized Real-time Player
+// amra-shunbo - Synchronized Real-time Player
 (function () {
   'use strict';
 
@@ -139,9 +139,10 @@
 
       const cx = width / 2;
       const cy = height / 2;
-      const innerRadius = 94; // Just outside the 175px diameter center vinyl
-      const maxExtension = Math.min(cx, cy) - innerRadius - 12;
       const albumBox = document.getElementById('albumArtworkBox');
+      const boxRadius = albumBox ? (albumBox.offsetWidth / 2) : 70;
+      const innerRadius = boxRadius + 6;
+      const maxExtension = Math.max(15, Math.min(cx, cy) - innerRadius - 8);
 
       if (!analyser || audio.paused) {
         // Idle Radial Breathing Halo
@@ -511,7 +512,7 @@
 
         applySyncState(state);
         initVisualizer();
-        showToast(`Connected to YouTube Music room ${room_id}!`, '✨');
+        showToast(`Connected to amra-shunbo room ${room_id}!`, '✨');
         break;
       }
 
@@ -886,7 +887,9 @@
       `;
       chatMessages.appendChild(row);
     }
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    requestAnimationFrame(() => {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    });
   }
 
   // Send Chat Message
@@ -900,6 +903,9 @@
       payload: { content }
     }));
     chatInput.value = '';
+    requestAnimationFrame(() => {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    });
   });
 
   // Copy Invite Link
@@ -912,5 +918,20 @@
       prompt('Copy invite link:', inviteUrl);
     });
   });
+
+  // Header Chat Button
+  const headerChatBtn = document.getElementById('headerChatBtn');
+  if (headerChatBtn) {
+    headerChatBtn.addEventListener('click', () => {
+      const chatInput = document.getElementById('chatInput');
+      const chatDrawer = document.querySelector('.ytm-chat-drawer');
+      if (chatDrawer) {
+        chatDrawer.scrollIntoView({ behavior: 'smooth' });
+      }
+      if (chatInput) {
+        setTimeout(() => chatInput.focus(), 150);
+      }
+    });
+  }
 
 })();
