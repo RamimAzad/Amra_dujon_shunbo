@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Music - Synchronized Room</title>
+  <link rel="stylesheet" href="/static/style.css?v=6">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='16' fill='%23FF0000'/><circle cx='16' cy='16' r='10' stroke='white' stroke-width='2' fill='none'/><polygon points='13,11 22,16 13,21' fill='white'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Room Entry & Passcode Gate Modal -->
+  <div class="auth-overlay" id="authModal">
+    <div class="auth-card">
+      <div class="ytm-logo-large">
+        <svg width="48" height="48" viewBox="0 0 32 32">
+          <circle cx="16" cy="16" r="16" fill="#FF0000"/>
+          <circle cx="16" cy="16" r="10" stroke="#FFFFFF" stroke-width="1.8" fill="none"/>
+          <polygon points="14,11 21,16 14,21" fill="#FFFFFF"/>
+        </svg>
+      </div>
+      <h1>YouTube Music</h1>
+      <p class="subtitle">Synchronized listening room • Low latency audio</p>
+
+      <div class="auth-tabs">
+        <button class="auth-tab-pill active" id="tabJoinBtn">Join Room</button>
+        <button class="auth-tab-pill" id="tabCreateBtn">Create Room</button>
+      </div>
+
+      <!-- Join Room Form -->
+      <form id="joinForm">
+        <div class="form-group">
+          <label for="joinRoomId">Room Code</label>
+          <input type="text" id="joinRoomId" class="form-control" placeholder="e.g. 7X8K2M" required style="text-transform: uppercase;">
+        </div>
+        <div class="form-group">
+          <label for="joinPasscode">Passcode / PIN</label>
+          <input type="password" id="joinPasscode" class="form-control" placeholder="Required PIN to hear music" required>
+        </div>
+        <div class="form-group">
+          <label for="joinNickname">Your Nickname</label>
+          <input type="text" id="joinNickname" class="form-control" placeholder="e.g. Alex" required>
+        </div>
+        <button type="submit" class="btn-ytm-primary" id="joinSubmitBtn">Unlock & Join Music Room</button>
+      </form>
+
+      <!-- Create Room Form -->
+      <form id="createForm" style="display: none;">
+        <div class="form-group">
+          <label for="createPasscode">Set Room PIN / Passcode</label>
+          <input type="text" id="createPasscode" class="form-control" placeholder="e.g. 4892 (leave empty for random PIN)">
+        </div>
+        <div class="form-group">
+          <label for="createNickname">Your Nickname</label>
+          <input type="text" id="createNickname" class="form-control" placeholder="e.g. Alex" required>
+        </div>
+        <button type="submit" class="btn-ytm-primary" id="createSubmitBtn">Create Room & Invite</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- YouTube Music Top Navigation Bar -->
+  <header class="ytm-header">
+    <div class="ytm-brand">
+      <svg class="ytm-icon" width="28" height="28" viewBox="0 0 32 32">
+        <circle cx="16" cy="16" r="16" fill="#FF0000"/>
+        <circle cx="16" cy="16" r="10" stroke="#FFFFFF" stroke-width="1.8" fill="none"/>
+        <polygon points="14,11 21,16 14,21" fill="#FFFFFF"/>
+      </svg>
+      <span class="ytm-brand-text">Music <span class="ytm-sub-badge">SYNC</span></span>
+    </div>
+
+    <div class="ytm-header-center">
+      <div class="ytm-room-pill">
+        <span class="live-dot"></span>
+        <span>Room: <strong id="headerRoomCode">------</strong></span>
+        <span class="divider">•</span>
+        <span>PIN: <strong id="headerPasscode">----</strong></span>
+      </div>
+      <button class="ytm-pill-btn" id="copyInviteBtn" title="Copy shareable link">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M16 1H4C2.9 1 2 1.9 2 3v14h2V3h12V1zm3 4H8C6.9 5 6 5.9 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+        </svg>
+        <span>Copy Link</span>
+      </button>
+      <div class="ytm-room-pill listeners-pill">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+        </svg>
+        <span id="listenerCount">0</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main YouTube Music Layout -->
+  <main class="ytm-main">
+    <!-- Left / Center Section: Now Playing Stage -->
+    <section class="ytm-stage">
+      <div class="ytm-player-container">
+        <!-- Album Artwork / Visualizer Stage -->
+        <div class="album-showcase">
+          <div class="album-artwork-box" id="albumArtworkBox">
+            <img id="albumArtImg" class="album-art-image" alt="Track Artwork" style="display: none;">
+            <div id="albumArtPlaceholder" class="album-placeholder">
+              <div class="vinyl-disc" id="vinylDisc">
+                <div class="vinyl-label">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="#FF0000">
+                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Integrated Ambient Audio Spectrum -->
+          <div class="visualizer-container">
+            <canvas id="visualizerCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Track Metadata -->
+        <div class="track-header-meta">
+          <div class="track-text">
+            <h1 class="track-title" id="trackTitle">No track loaded yet</h1>
+            <div class="track-sub-details">
+              <span id="trackSourceBadge" class="source-chip" style="display: none;">
+                <span id="trackSourceIcon">📁</span>
+                <span id="trackSourceName">Local File</span>
+              </span>
+              <span class="sub-artist" id="trackArtist">Select an audio file or paste YouTube link below</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- YouTube Scrubber Bar -->
+        <div class="ytm-timeline-area">
+          <div class="timeline-bar-wrapper">
+            <input type="range" class="ytm-slider" id="timelineSlider" min="0" max="100" value="0" step="0.1">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div class="ytm-time-labels">
+            <span id="currentTimeLabel">0:00</span>
+            <span id="durationLabel">0:00</span>
+          </div>
+        </div>
+
+        <!-- Player Controls (YouTube Music Desktop Style) -->
+        <div class="ytm-controls-row">
+          <div class="controls-left">
+            <button class="ytm-icon-btn" id="syncBtn" title="Resync Playback With Room">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="controls-center">
+            <button class="ytm-play-btn" id="playBtn" title="Synchronized Play / Pause">
+              <svg id="playIconSvg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="controls-right">
+            <div class="ytm-volume-box">
+              <button class="ytm-icon-btn" id="volumeIconBtn">
+                <svg id="volIconSvg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+              </button>
+              <input type="range" class="ytm-vol-slider" id="volumeSlider" min="0" max="1" step="0.05" value="0.8">
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Music (Ingest Options) Section -->
+        <div class="ytm-ingest-shelf">
+          <div class="ytm-filter-chips">
+            <button class="ytm-chip active" id="tabUploadBtn">
+              <span>📁 Upload File</span>
+            </button>
+            <button class="ytm-chip" id="tabYtBtn">
+              <span>▶️ YouTube URL</span>
+            </button>
+          </div>
+
+          <!-- Upload Content -->
+          <div id="uploadTabContent" class="ingest-pane">
+            <input type="file" id="fileInput" accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a,.aac" style="opacity: 0; position: absolute; z-index: -1; width: 0.1px; height: 0.1px; overflow: hidden;">
+            <div class="ytm-dropzone" id="dropZone" role="button" tabindex="0">
+              <div class="drop-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="#AAAAAA">
+                  <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+                </svg>
+              </div>
+              <p class="drop-text">Drag and drop audio files, or <button type="button" class="browse-btn" id="browseBtn">browse files</button></p>
+              <span class="drop-hint">Supports MP3, WAV, FLAC, OGG, AAC up to 50MB</span>
+            </div>
+          </div>
+
+          <!-- YouTube Content -->
+          <div id="ytTabContent" class="ingest-pane" style="display: none;">
+            <form id="ytForm" class="ytm-search-form">
+              <div class="ytm-search-box">
+                <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="#888888">
+                  <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                </svg>
+                <input type="url" id="ytUrlInput" class="ytm-search-input" placeholder="Paste YouTube link (e.g. https://www.youtube.com/watch?v=...)" required>
+                <button type="submit" class="ytm-btn-red" id="ytSubmitBtn">Load Track</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Ingestion Status Notification -->
+          <div class="ytm-status-banner" id="statusPill">
+            <div class="ytm-spinner"></div>
+            <span id="statusMessage">Processing audio...</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Right Sidebar: Live Room Chat -->
+    <aside class="ytm-chat-drawer">
+      <div class="chat-drawer-header">
+        <div class="chat-header-title">
+          <span>Live Chat</span>
+          <span class="user-badge" id="myNicknameLabel"></span>
+        </div>
+      </div>
+
+      <div class="chat-feed" id="chatMessages">
+        <!-- Messages injected here -->
+      </div>
+
+      <form class="chat-composer" id="chatForm">
+        <input type="text" id="chatInput" class="composer-input" placeholder="Say something..." autocomplete="off">
+        <button type="submit" class="composer-send-btn" title="Send message">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </button>
+      </form>
+    </aside>
+  </main>
+
+  <!-- Audio Element -->
+  <audio id="audioPlayer" preload="auto" crossorigin="anonymous"></audio>
+
+  <!-- Client Script -->
+  <script src="/static/app.js?v=6"></script>
+</body>
+</html>
