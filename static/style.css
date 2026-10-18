@@ -314,7 +314,7 @@ body {
 .album-showcase {
   position: relative;
   width: 100%;
-  height: clamp(230px, 30vh, 290px);
+  height: clamp(310px, 40vh, 350px);
   background: radial-gradient(circle at center, #1c0808 0%, #080808 55%, #030303 100%);
   border: 1px solid var(--ytm-border);
   border-radius: 14px;
@@ -327,8 +327,8 @@ body {
 
 .album-artwork-box {
   position: relative;
-  width: clamp(120px, 16vh, 150px);
-  height: clamp(120px, 16vh, 150px);
+  width: clamp(135px, 18vh, 160px);
+  height: clamp(135px, 18vh, 160px);
   border-radius: 50%;
   overflow: hidden;
   box-shadow: 0 0 25px rgba(0, 0, 0, 0.95);
@@ -772,11 +772,14 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .chat-drawer-header {
   padding: 8px 14px;
   border-bottom: 1px solid var(--ytm-border);
+  flex-shrink: 0;
 }
 
 .chat-header-title {
@@ -794,12 +797,33 @@ body {
 }
 
 .chat-feed {
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;
   padding: 8px 12px;
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  scroll-behavior: smooth;
+}
+
+.chat-feed::-webkit-scrollbar {
+  width: 5px;
+}
+
+.chat-feed::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-feed::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.chat-feed::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .ytm-chat-row {
@@ -872,6 +896,7 @@ body {
   align-items: center;
   gap: 6px;
   background: var(--ytm-bg-base);
+  flex-shrink: 0;
 }
 
 .composer-input {
@@ -911,8 +936,10 @@ body {
   .ytm-chat-drawer {
     border-left: none;
     border-top: 1px solid var(--ytm-border);
-    height: 240px;
+    height: 250px;
+    max-height: 280px;
     flex-shrink: 0;
+    overflow: hidden;
   }
 }
 

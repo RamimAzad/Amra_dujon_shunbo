@@ -887,7 +887,9 @@
       `;
       chatMessages.appendChild(row);
     }
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    requestAnimationFrame(() => {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    });
   }
 
   // Send Chat Message
@@ -901,6 +903,9 @@
       payload: { content }
     }));
     chatInput.value = '';
+    requestAnimationFrame(() => {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    });
   });
 
   // Copy Invite Link
