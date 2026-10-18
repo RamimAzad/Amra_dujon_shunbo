@@ -1,5 +1,5 @@
 # Build stage with official Rust image
-FROM rust:1.80-slim as builder
+FROM rust:1-slim-bookworm AS builder
 
 WORKDIR /app
 
