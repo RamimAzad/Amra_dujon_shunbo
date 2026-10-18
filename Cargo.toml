@@ -18,3 +18,4 @@ mime_guess = "2.0"
 sanitize-filename = "0.5"
 tokio-util = { version = "0.7", features = ["io"] }
 anyhow = "1.0"
+regex = "1.10"
