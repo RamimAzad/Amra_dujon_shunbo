@@ -139,9 +139,10 @@
 
       const cx = width / 2;
       const cy = height / 2;
-      const innerRadius = 94; // Just outside the 175px diameter center vinyl
-      const maxExtension = Math.min(cx, cy) - innerRadius - 12;
       const albumBox = document.getElementById('albumArtworkBox');
+      const boxRadius = albumBox ? (albumBox.offsetWidth / 2) : 70;
+      const innerRadius = boxRadius + 6;
+      const maxExtension = Math.max(15, Math.min(cx, cy) - innerRadius - 8);
 
       if (!analyser || audio.paused) {
         // Idle Radial Breathing Halo
@@ -912,5 +913,20 @@
       prompt('Copy invite link:', inviteUrl);
     });
   });
+
+  // Header Chat Button
+  const headerChatBtn = document.getElementById('headerChatBtn');
+  if (headerChatBtn) {
+    headerChatBtn.addEventListener('click', () => {
+      const chatInput = document.getElementById('chatInput');
+      const chatDrawer = document.querySelector('.ytm-chat-drawer');
+      if (chatDrawer) {
+        chatDrawer.scrollIntoView({ behavior: 'smooth' });
+      }
+      if (chatInput) {
+        setTimeout(() => chatInput.focus(), 150);
+      }
+    });
+  }
 
 })();
