@@ -119,7 +119,7 @@
         audioSourceNode = audioCtx.createMediaElementSource(audio);
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256; // 128 frequency bins
-        analyser.smoothingTimeConstant = 0.72; // Snappy beat responsiveness
+        analyser.smoothingTimeConstant = 0.85; // Smooth, composed, less twitchy/sensitive
         audioSourceNode.connect(analyser);
         analyser.connect(audioCtx.destination);
       } catch (err) {
@@ -181,55 +181,52 @@
       const dataArray = new Uint8Array(bufferLength);
       analyser.getByteFrequencyData(dataArray);
 
-      // Measure Bass & Spectral Energy for Beat Stages
+      // Measure Bass & Spectral Energy for Beat Stages with higher stability
       const bassRaw = (dataArray[1] + dataArray[2] + dataArray[3] + dataArray[4] + dataArray[5]) / (5 * 255);
-      smoothBassEnergy += (bassRaw - smoothBassEnergy) * 0.35;
+      smoothBassEnergy += (bassRaw - smoothBassEnergy) * 0.22;
 
       let sumEnergy = 0;
       for (let j = 0; j < 48; j++) sumEnergy += dataArray[j];
       const avgEnergy = sumEnergy / (48 * 255);
 
-      // Multi-stage beat detection:
-      // Stage 1: Soft / Intro rhythm
-      // Stage 2: Groove / Mid beat buildup
-      // Stage 3: Heavy drop / Climax
+      // Tuned multi-stage beat detection (higher thresholds to prevent hyper-sensitivity):
       let beatStage = 1;
-      let stageLengthMult = 0.65;
-      let peakHoldDuration = 6;
+      let stageLengthMult = 0.55;
+      let peakHoldDuration = 0;
 
-      if (avgEnergy >= 0.44 || smoothBassEnergy >= 0.55) {
+      if (avgEnergy >= 0.55 || smoothBassEnergy >= 0.65) {
         beatStage = 3;
-        stageLengthMult = 1.35; // Maximum explosive extension
-        peakHoldDuration = 20;  // Lines STAY suspended at top for multiple beats!
-      } else if (avgEnergy >= 0.20 || smoothBassEnergy >= 0.26) {
+        stageLengthMult = 1.05; // Controlled energetic expansion on heavy drops
+        peakHoldDuration = 14;  // Peak hold on genuine heavy drops
+      } else if (avgEnergy >= 0.28 || smoothBassEnergy >= 0.36) {
         beatStage = 2;
-        stageLengthMult = 0.95; // Strong groove
-        peakHoldDuration = 12;  // Moderate peak hold
+        stageLengthMult = 0.78; // Gentle groove
+        peakHoldDuration = 6;
       }
 
-      // Dynamic Beat Scaling on Center Artwork
+      // Controlled Beat Scaling on Center Artwork (less sensitive)
       if (albumBox) {
         let pulseScale = 1.0;
         let glowSpread = 25;
         let glowAlpha = 0.2;
 
         if (beatStage === 1) {
-          pulseScale = 1.0 + smoothBassEnergy * 0.04;
-          glowSpread = 25 + smoothBassEnergy * 20;
-          glowAlpha = 0.2 + smoothBassEnergy * 0.3;
+          pulseScale = 1.0 + Math.max(0, smoothBassEnergy - 0.2) * 0.03;
+          glowSpread = 25 + smoothBassEnergy * 15;
+          glowAlpha = 0.2 + smoothBassEnergy * 0.2;
         } else if (beatStage === 2) {
-          pulseScale = 1.0 + smoothBassEnergy * 0.08;
-          glowSpread = 35 + smoothBassEnergy * 40;
-          glowAlpha = 0.35 + smoothBassEnergy * 0.55;
+          pulseScale = 1.0 + smoothBassEnergy * 0.05;
+          glowSpread = 30 + smoothBassEnergy * 25;
+          glowAlpha = 0.3 + smoothBassEnergy * 0.35;
         } else {
-          pulseScale = 1.0 + smoothBassEnergy * 0.13;
-          glowSpread = 50 + smoothBassEnergy * 70;
-          glowAlpha = 0.5 + smoothBassEnergy * 0.9;
+          pulseScale = 1.0 + smoothBassEnergy * 0.08;
+          glowSpread = 40 + smoothBassEnergy * 45;
+          glowAlpha = 0.45 + smoothBassEnergy * 0.5;
 
-          // Trigger radial shockwave ring on heavy kicks
-          if (smoothBassEnergy > 0.62 && shockwaveAlpha <= 0.15) {
+          // Shockwave only triggers on distinct loud kick drops
+          if (smoothBassEnergy > 0.75 && shockwaveAlpha <= 0.1) {
             shockwaveRadius = innerRadius;
-            shockwaveAlpha = 0.85;
+            shockwaveAlpha = 0.7;
           }
         }
 
@@ -242,10 +239,10 @@
         canvasCtx.beginPath();
         canvasCtx.arc(cx, cy, shockwaveRadius, 0, Math.PI * 2);
         canvasCtx.strokeStyle = `rgba(255, 60, 0, ${shockwaveAlpha})`;
-        canvasCtx.lineWidth = 3;
+        canvasCtx.lineWidth = 2.5;
         canvasCtx.stroke();
-        shockwaveRadius += 4.5;
-        shockwaveAlpha *= 0.91;
+        shockwaveRadius += 4.0;
+        shockwaveAlpha *= 0.90;
       }
 
       // Map 48 logarithmic bands mirrored symmetrically around 96 radial lines
@@ -260,27 +257,27 @@
         const frac = binIdx - low;
         let val = dataArray[low] * (1 - frac) + dataArray[high] * frac;
 
-        // Treble & high-energy stage boost
-        const boost = (1.0 + Math.pow(norm, 0.7) * 1.6) * stageLengthMult;
+        // Controlled treble curve (less aggressive boost)
+        const boost = (1.0 + Math.pow(norm, 0.6) * 0.5) * stageLengthMult;
         val = Math.min(255, val * boost);
 
-        const targetLen = Math.max(6, (val / 255) * maxExtension);
+        // Gamma power curve (1.35) filters out low-level noise and micro-jitter
+        const normalizedPower = Math.pow(val / 255, 1.35);
+        const targetLen = Math.max(5, normalizedPower * maxExtension);
 
-        // Peak Hold logic ("lines stay at the top after a specific range of beat")
+        // Smooth attack and decay (prevents jittery twitching)
         if (targetLen >= radialHeights[i]) {
-          radialHeights[i] = targetLen;
-          // When beat is strong (>40% of max or in high stage), activate hold
-          if (targetLen > maxExtension * 0.42 || beatStage >= 2) {
+          radialHeights[i] += (targetLen - radialHeights[i]) * 0.42;
+          // Peak hold activates only on prominent beats
+          if (targetLen > maxExtension * 0.65 && beatStage >= 2) {
             radialPeakHolds[i] = peakHoldDuration;
           }
         } else {
-          // If held, stay near the top!
           if (radialPeakHolds[i] > 0) {
             radialPeakHolds[i]--;
             radialHeights[i] = Math.max(targetLen, radialHeights[i] * 0.985);
           } else {
-            // Decay curve
-            radialHeights[i] += (targetLen - radialHeights[i]) * 0.22;
+            radialHeights[i] += (targetLen - radialHeights[i]) * 0.16;
           }
         }
 
@@ -289,7 +286,7 @@
           radialPeaks[i] = radialHeights[i];
           radialPeakSpeeds[i] = 0;
         } else {
-          radialPeakSpeeds[i] += 0.38;
+          radialPeakSpeeds[i] += 0.32;
           radialPeaks[i] = Math.max(0, radialPeaks[i] - radialPeakSpeeds[i]);
         }
 
