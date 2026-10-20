@@ -110,6 +110,9 @@
   let lastBeatKickTime = 0;
   let shockwaveRadius = 0;
   let shockwaveAlpha = 0;
+  let flowPhase = 0;
+  let rhythmicSwell = 0;
+  let lastFrameTime = performance.now();
 
   // Global Musical Synchronization State shared across visualizer & ambient engines
   const musicalState = {
@@ -157,15 +160,22 @@
       const cx = width / 2;
       const cy = height / 2;
       const albumBox = document.getElementById('albumArtworkBox');
-      const boxRadius = albumBox ? (albumBox.offsetWidth / 2) : 70;
-      const innerRadius = boxRadius + 6;
-      const maxExtension = Math.max(15, Math.min(cx, cy) - innerRadius - 8);
+      const boxRadius = albumBox ? (albumBox.offsetWidth / 2) : 85;
+      const innerRadius = boxRadius + 8;
+      const maxExtension = Math.max(25, Math.min(cx, cy) - innerRadius - 10);
+
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
+      lastFrameTime = now;
 
       if (!analyser || audio.paused) {
         // Decay musical state gracefully when paused
         smoothBassEnergy += (0 - smoothBassEnergy) * 0.08;
         smoothMidEnergy += (0 - smoothMidEnergy) * 0.08;
         smoothTrebleEnergy += (0 - smoothTrebleEnergy) * 0.08;
+        rhythmicSwell *= 0.88;
+        flowPhase += 0.8 * dt; // gentle idle drift
+
         musicalState.isPlaying = false;
         musicalState.bass = smoothBassEnergy;
         musicalState.mids = smoothMidEnergy;
@@ -181,7 +191,7 @@
           const angle = (i / RADIAL_BAR_COUNT) * Math.PI * 2 - Math.PI / 2;
           const w1 = Math.sin(t * 1.4 + angle * 4);
           const w2 = Math.cos(t * 2.0 - angle * 2);
-          const idleLen = Math.max(5, ((w1 + w2) * 0.5 * 0.5 + 0.5) * 22 + 6);
+          const idleLen = Math.max(6, ((w1 + w2) * 0.5 * 0.5 + 0.5) * 24 + 8);
 
           const cosA = Math.cos(angle);
           const sinA = Math.sin(angle);
@@ -195,7 +205,7 @@
           canvasCtx.moveTo(x1, y1);
           canvasCtx.lineTo(x2, y2);
           canvasCtx.strokeStyle = 'rgba(255, 0, 0, 0.35)';
-          canvasCtx.lineWidth = 2.2;
+          canvasCtx.lineWidth = 2.4;
           canvasCtx.lineCap = 'round';
           canvasCtx.stroke();
         }
@@ -232,21 +242,20 @@
 
       // Tuned multi-stage beat detection with dynamic responsiveness
       let beatStage = 1;
-      let stageLengthMult = 0.85; // Graceful dancing baseline
+      let stageLengthMult = 0.88; // Graceful dancing baseline
       let peakHoldDuration = 0;
 
-      if (avgEnergy >= 0.40 || smoothBassEnergy >= 0.50) {
+      if (avgEnergy >= 0.38 || smoothBassEnergy >= 0.48) {
         beatStage = 3;
-        stageLengthMult = 1.45; // Energetic soaring peaks on drops & climaxes
-        peakHoldDuration = 16;  // Peak hold on heavy drops
-      } else if (avgEnergy >= 0.20 || smoothBassEnergy >= 0.28) {
+        stageLengthMult = 1.48; // Energetic soaring peaks on drops & climaxes
+        peakHoldDuration = 18;  // Peak hold on heavy drops
+      } else if (avgEnergy >= 0.18 || smoothBassEnergy >= 0.26) {
         beatStage = 2;
-        stageLengthMult = 1.15; // Vibrant groove
+        stageLengthMult = 1.18; // Vibrant groove
         peakHoldDuration = 8;
       }
 
-      // Rhythmic Beat Kick Detection (requires rising edge & minimum cooldown)
-      const now = performance.now();
+      // Rhythmic Beat Kick Detection
       const bassDelta = bassRaw - lastBassRaw;
       lastBassRaw = bassRaw;
 
@@ -256,6 +265,16 @@
         isBeatKick = true;
         kickIntensity = Math.min(1.0, bassDelta * 3.8);
         lastBeatKickTime = now;
+      }
+
+      // Continuous Rhythmic Flow Dynamics
+      const flowSpeed = 2.4 + smoothBassEnergy * 5.2 + smoothMidEnergy * 3.6;
+      flowPhase += flowSpeed * dt;
+
+      if (isBeatKick) {
+        rhythmicSwell = Math.min(1.0, rhythmicSwell + 0.55 + kickIntensity * 0.45);
+      } else {
+        rhythmicSwell *= 0.90;
       }
 
       // Sync into shared musical state
@@ -269,36 +288,21 @@
       musicalState.kickIntensity = kickIntensity;
       musicalState.time = now;
 
-      const baseInner = boxRadius + 6;
+      const baseInner = innerRadius;
 
       // Dynamic Beat Dancing on Center Album Artwork (disc bumps to the beat)
       if (albumBox) {
-        let pulseScale = 1.0;
-        let glowSpread = 26;
-        let glowAlpha = 0.28;
+        const discScale = 1.0 + smoothBassEnergy * 0.08 + rhythmicSwell * 0.09;
+        const glowSpread = 30 + smoothBassEnergy * 45 + rhythmicSwell * 35;
+        const glowAlpha = 0.35 + smoothBassEnergy * 0.45 + rhythmicSwell * 0.25;
 
-        if (beatStage === 1) {
-          pulseScale = 1.0 + smoothBassEnergy * 0.06;
-          glowSpread = 26 + smoothBassEnergy * 25;
-          glowAlpha = 0.28 + smoothBassEnergy * 0.25;
-        } else if (beatStage === 2) {
-          pulseScale = 1.0 + smoothBassEnergy * 0.10 + (isBeatKick ? kickIntensity * 0.04 : 0);
-          glowSpread = 36 + smoothBassEnergy * 40;
-          glowAlpha = 0.40 + smoothBassEnergy * 0.35;
-        } else {
-          pulseScale = 1.0 + smoothBassEnergy * 0.16 + (isBeatKick ? kickIntensity * 0.08 : 0);
-          glowSpread = 50 + smoothBassEnergy * 65;
-          glowAlpha = 0.55 + smoothBassEnergy * 0.45;
-
-          // Shockwave triggers on heavy drops
-          if (smoothBassEnergy > 0.65 && shockwaveAlpha <= 0.1) {
-            shockwaveRadius = baseInner;
-            shockwaveAlpha = 0.85;
-          }
-        }
-
-        albumBox.style.transform = `scale(${pulseScale})`;
+        albumBox.style.transform = `scale(${discScale})`;
         albumBox.style.boxShadow = `0 0 ${glowSpread}px rgba(255, 20, 60, ${glowAlpha}), 0 0 ${glowSpread * 1.8}px rgba(99, 102, 241, ${glowAlpha * 0.55})`;
+
+        if (beatStage === 3 && smoothBassEnergy > 0.65 && shockwaveAlpha <= 0.1) {
+          shockwaveRadius = baseInner;
+          shockwaveAlpha = 0.85;
+        }
       }
 
       // Draw expanding beat shockwave ring inside showcase if active
@@ -313,27 +317,28 @@
       }
 
       // 1. Draw Audio-Reactive Glowing Base Track Ring
-      const currentInnerCenter = baseInner + (smoothBassEnergy * 7);
+      const currentInnerCenter = baseInner + (smoothBassEnergy * 8) + (rhythmicSwell * 5);
       canvasCtx.beginPath();
       canvasCtx.arc(cx, cy, currentInnerCenter, 0, Math.PI * 2);
-      canvasCtx.strokeStyle = `rgba(255, 30, 60, ${0.25 + smoothBassEnergy * 0.45})`;
-      canvasCtx.lineWidth = 1.8 + smoothBassEnergy * 1.6;
+      canvasCtx.strokeStyle = `rgba(255, 30, 60, ${0.28 + smoothBassEnergy * 0.45})`;
+      canvasCtx.lineWidth = 2.0 + smoothBassEnergy * 1.6;
       canvasCtx.stroke();
 
-      // 2. Draw Subtle Outer Celestial Orbit Ring
-      const orbitRadius = baseInner + maxExtension * (0.65 + smoothBassEnergy * 0.28);
+      // 2. Draw Rotating Outer Celestial Orbit Ring
+      const orbitRadius = baseInner + maxExtension * (0.68 + smoothBassEnergy * 0.28);
       canvasCtx.beginPath();
       canvasCtx.arc(cx, cy, orbitRadius, 0, Math.PI * 2);
-      canvasCtx.strokeStyle = `rgba(99, 102, 241, ${0.10 + smoothMidEnergy * 0.25})`;
+      canvasCtx.strokeStyle = `rgba(99, 102, 241, ${0.12 + smoothMidEnergy * 0.26})`;
       canvasCtx.lineWidth = 1.2;
-      canvasCtx.setLineDash([6, 10]);
+      canvasCtx.lineDashOffset = -flowPhase * 16;
+      canvasCtx.setLineDash([7, 11]);
       canvasCtx.stroke();
       canvasCtx.setLineDash([]);
 
       // Map 48 logarithmic bands mirrored symmetrically around 96 radial lines
       const halfCount = RADIAL_BAR_COUNT / 2;
-      const t = performance.now() / 1000;
       const beatDancePulse = 1.0 + smoothBassEnergy * 0.48 + (isBeatKick ? kickIntensity * 0.40 : 0);
+      const tips = new Array(RADIAL_BAR_COUNT);
 
       for (let i = 0; i < RADIAL_BAR_COUNT; i++) {
         // Symmetrical mirroring: left and right halves mirror from bottom to top
@@ -352,20 +357,20 @@
         // Power curve (1.15) for rich dynamic range
         const normalizedPower = Math.pow(val / 255, 1.15);
 
-        // Multi-frequency harmonic traveling wave: the circle literally dances and ripples with the beat!
+        // Continuous Rhythmic Flowing Harmonics (traveling wave octaves along the circle perimeter)
         const angle = (i / RADIAL_BAR_COUNT) * Math.PI * 2 - Math.PI / 2;
-        const wave1 = Math.sin(angle * 4 + t * 4.2) * (smoothBassEnergy * 14 + smoothMidEnergy * 8);
-        const wave2 = Math.cos(angle * 7 - t * 3.0) * (smoothBassEnergy * 8 + smoothTrebleEnergy * 6);
-        const wave3 = Math.sin(angle * 2 + t * 6.0) * (smoothBassEnergy * 6);
-        const waveDance = wave1 + wave2 + wave3;
+        const wave1 = Math.sin(angle * 3 + flowPhase * 1.4) * (smoothBassEnergy * 16 + smoothMidEnergy * 10);
+        const wave2 = Math.cos(angle * 6 - flowPhase * 1.8) * (smoothBassEnergy * 10 + smoothTrebleEnergy * 8);
+        const wave3 = Math.sin(angle * 9 + flowPhase * 2.6) * (smoothMidEnergy * 7);
+        const rhythmicFlow = wave1 + wave2 + wave3;
 
-        const targetLen = Math.max(6, (normalizedPower * maxExtension * beatDancePulse) + waveDance);
+        const beatSurge = 1.0 + smoothBassEnergy * 0.45 + rhythmicSwell * 0.40;
+        const targetLen = Math.max(6, (normalizedPower * maxExtension * beatSurge) + rhythmicFlow);
 
-        // Snappy attack & smooth decay
+        // Snappy attack & smooth decay following the musical groove
         if (targetLen >= radialHeights[i]) {
-          radialHeights[i] += (targetLen - radialHeights[i]) * 0.52;
-          // Peak hold activates on prominent beats
-          if (targetLen > maxExtension * 0.55 && beatStage >= 2) {
+          radialHeights[i] += (targetLen - radialHeights[i]) * 0.54;
+          if (targetLen > maxExtension * 0.52 && beatStage >= 2) {
             radialPeakHolds[i] = peakHoldDuration;
           }
         } else {
@@ -386,12 +391,12 @@
           radialPeaks[i] = Math.max(0, radialPeaks[i] - radialPeakSpeeds[i]);
         }
         if (isBeatKick) {
-          radialPeaks[i] = Math.max(radialPeaks[i], radialHeights[i] + kickIntensity * 5);
+          radialPeaks[i] = Math.max(radialPeaks[i], radialHeights[i] + kickIntensity * 6);
         }
 
-        // The circle base ripples dynamically around the circumference
-        const innerRipple = Math.sin(angle * 6 + t * 5) * (smoothBassEnergy * 4);
-        const currentInner = baseInner + (smoothBassEnergy * 7) + innerRipple;
+        // Base circle ripples harmonically with the rhythmic flow
+        const baseWave = Math.sin(angle * 6 + flowPhase * 1.2) * (smoothBassEnergy * 5 + rhythmicSwell * 4);
+        const currentInner = baseInner + (smoothBassEnergy * 8) + (rhythmicSwell * 5) + baseWave;
 
         const cosA = Math.cos(angle);
         const sinA = Math.sin(angle);
@@ -400,6 +405,8 @@
         const y1 = cy + sinA * currentInner;
         const x2 = cx + cosA * (currentInner + radialHeights[i]);
         const y2 = cy + sinA * (currentInner + radialHeights[i]);
+
+        tips[i] = { x: x2, y: y2 };
 
         // Dynamic Line Gradient (shifts hotter & more vivid on beats)
         const lineGrad = canvasCtx.createLinearGradient(x1, y1, x2, y2);
@@ -424,13 +431,13 @@
         canvasCtx.moveTo(x1, y1);
         canvasCtx.lineTo(x2, y2);
         canvasCtx.strokeStyle = lineGrad;
-        canvasCtx.lineWidth = (beatStage === 3 ? 3.0 : 2.6) + smoothBassEnergy * 0.8;
+        canvasCtx.lineWidth = (beatStage === 3 ? 3.2 : 2.8) + smoothBassEnergy * 0.8;
         canvasCtx.lineCap = 'round';
         canvasCtx.stroke();
 
         // Render Floating Glowing Peak Orb
         if (radialPeaks[i] > 7) {
-          const peakDist = currentInner + radialPeaks[i] + 3.8;
+          const peakDist = currentInner + radialPeaks[i] + 4.0;
           const px = cx + cosA * peakDist;
           const py = cy + sinA * peakDist;
 
@@ -443,6 +450,33 @@
           canvasCtx.shadowBlur = 0;
         }
       }
+
+      // 3. Draw Fluid Rhythmic Contour Ribbon connecting the line tips in a glowing wave
+      canvasCtx.beginPath();
+      for (let k = 0; k <= RADIAL_BAR_COUNT; k++) {
+        const idx = k % RADIAL_BAR_COUNT;
+        const pt = tips[idx];
+        if (k === 0) {
+          canvasCtx.moveTo(pt.x, pt.y);
+        } else {
+          const prevIdx = (k - 1) % RADIAL_BAR_COUNT;
+          const prevPt = tips[prevIdx];
+          const midX = (prevPt.x + pt.x) / 2;
+          const midY = (prevPt.y + pt.y) / 2;
+          canvasCtx.quadraticCurveTo(prevPt.x, prevPt.y, midX, midY);
+        }
+      }
+      canvasCtx.closePath();
+
+      const ribbonAlpha = 0.28 + smoothBassEnergy * 0.38 + rhythmicSwell * 0.28;
+      canvasCtx.strokeStyle = beatStage === 3 
+        ? `rgba(255, 204, 0, ${ribbonAlpha})` 
+        : (beatStage === 2 ? `rgba(255, 68, 102, ${ribbonAlpha})` : `rgba(255, 51, 75, ${ribbonAlpha * 0.75})`);
+      canvasCtx.lineWidth = 1.8 + smoothBassEnergy * 1.4;
+      canvasCtx.shadowColor = beatStage === 3 ? '#ffaa00' : '#ff0033';
+      canvasCtx.shadowBlur = beatStage === 3 ? 14 : 7;
+      canvasCtx.stroke();
+      canvasCtx.shadowBlur = 0;
     }
 
     if (!animationFrameId) {
