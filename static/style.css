@@ -438,7 +438,7 @@ body {
 
 .ytm-player-container {
   width: 100%;
-  max-width: clamp(380px, 48vh, 480px);
+  max-width: 630px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -463,8 +463,8 @@ body {
 
 .album-artwork-box {
   position: relative;
-  width: clamp(160px, 20vh, 185px);
-  height: clamp(160px, 20vh, 185px);
+  width: clamp(170px, 22vh, 205px);
+  height: clamp(170px, 22vh, 205px);
   border-radius: 50%;
   overflow: hidden;
   box-shadow: 0 0 35px rgba(0, 0, 0, 0.95);

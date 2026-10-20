@@ -160,9 +160,11 @@
       const cx = width / 2;
       const cy = height / 2;
       const albumBox = document.getElementById('albumArtworkBox');
-      const boxRadius = albumBox ? (albumBox.offsetWidth / 2) : 85;
+      const boxRadius = albumBox ? (albumBox.offsetWidth / 2) : 90;
       const innerRadius = boxRadius + 8;
-      const maxExtension = Math.max(25, Math.min(cx, cy) - innerRadius - 32);
+      // Maintain the generous ~110px space between circle and border on all 4 sides (left, right, top, bottom)
+      const targetOuterRadius = Math.min(cx, cy) * 0.65;
+      const maxExtension = Math.max(30, targetOuterRadius - innerRadius);
 
       const now = performance.now();
       const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
