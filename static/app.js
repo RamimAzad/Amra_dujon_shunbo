@@ -162,7 +162,7 @@
       const albumBox = document.getElementById('albumArtworkBox');
       const boxRadius = albumBox ? (albumBox.offsetWidth / 2) : 85;
       const innerRadius = boxRadius + 8;
-      const maxExtension = Math.max(25, Math.min(cx, cy) - innerRadius - 10);
+      const maxExtension = Math.max(25, Math.min(cx, cy) - innerRadius - 32);
 
       const now = performance.now();
       const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
