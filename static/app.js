@@ -112,6 +112,7 @@
   let shockwaveAlpha = 0;
   let flowPhase = 0;
   let rhythmicSwell = 0;
+  let smoothStageMult = 0.72;
   let lastFrameTime = performance.now();
 
   // Global Musical Synchronization State shared across visualizer & ambient engines
@@ -139,7 +140,7 @@
         audioSourceNode = audioCtx.createMediaElementSource(audio);
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256; // 128 frequency bins
-        analyser.smoothingTimeConstant = 0.88; // Composed, silky, less twitchy/sensitive
+        analyser.smoothingTimeConstant = 0.90; // High stability, silky smooth, eliminates jitter
         audioSourceNode.connect(analyser);
         analyser.connect(audioCtx.destination);
       } catch (err) {
@@ -160,11 +161,9 @@
       const cx = width / 2;
       const cy = height / 2;
       const albumBox = document.getElementById('albumArtworkBox');
-      const boxRadius = albumBox ? (albumBox.offsetWidth / 2) : 90;
+      const boxRadius = albumBox ? (albumBox.offsetWidth / 2) : 85;
       const innerRadius = boxRadius + 8;
-      // Maintain the generous ~110px space between circle and border on all 4 sides (left, right, top, bottom)
-      const targetOuterRadius = Math.min(cx, cy) * 0.65;
-      const maxExtension = Math.max(30, targetOuterRadius - innerRadius);
+      const maxExtension = Math.max(25, Math.min(cx, cy) - innerRadius - 10);
 
       const now = performance.now();
       const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
@@ -224,38 +223,41 @@
       const dataArray = new Uint8Array(bufferLength);
       analyser.getByteFrequencyData(dataArray);
 
-      // Measure Bass (bins 1-5), Mids (bins 6-24), Treble (bins 25-64) with gentle smoothing
+      // Measure Bass (bins 1-5), Mids (bins 6-24), Treble (bins 25-64) with high-damping smoothing
       const bassRaw = (dataArray[1] + dataArray[2] + dataArray[3] + dataArray[4] + dataArray[5]) / (5 * 255);
-      smoothBassEnergy += (bassRaw - smoothBassEnergy) * 0.16;
+      smoothBassEnergy += (bassRaw - smoothBassEnergy) * 0.09;
 
       let midSum = 0;
       for (let m = 6; m <= 24; m++) midSum += dataArray[m];
       const midRaw = midSum / (19 * 255);
-      smoothMidEnergy += (midRaw - smoothMidEnergy) * 0.15;
+      smoothMidEnergy += (midRaw - smoothMidEnergy) * 0.09;
 
       let trebleSum = 0;
       for (let tr = 25; tr <= 64; tr++) trebleSum += dataArray[tr];
       const trebleRaw = trebleSum / (40 * 255);
-      smoothTrebleEnergy += (trebleRaw - smoothTrebleEnergy) * 0.18;
+      smoothTrebleEnergy += (trebleRaw - smoothTrebleEnergy) * 0.10;
 
       let sumEnergy = 0;
       for (let j = 0; j < 48; j++) sumEnergy += dataArray[j];
       const avgEnergy = sumEnergy / (48 * 255);
 
-      // Controlled multi-stage beat detection with stable thresholds
+      // Controlled multi-stage beat detection with smooth continuous interpolation
       let beatStage = 1;
-      let stageLengthMult = 0.76; // Graceful, composed baseline
+      let targetStageMult = 0.72;
       let peakHoldDuration = 0;
 
-      if (avgEnergy >= 0.46 || smoothBassEnergy >= 0.56) {
+      if (avgEnergy >= 0.52 || smoothBassEnergy >= 0.62) {
         beatStage = 3;
-        stageLengthMult = 1.28; // Controlled soaring peaks on heavy drops
-        peakHoldDuration = 14;  // Peak hold on heavy drops
-      } else if (avgEnergy >= 0.24 || smoothBassEnergy >= 0.32) {
+        targetStageMult = 1.15; // Controlled expansion on major drops
+        peakHoldDuration = 12;
+      } else if (avgEnergy >= 0.28 || smoothBassEnergy >= 0.38) {
         beatStage = 2;
-        stageLengthMult = 1.02; // Elegant groove
+        targetStageMult = 0.92; // Calm, steady groove
         peakHoldDuration = 6;
       }
+
+      // Smooth camera-stabilized stage transition (prevents abrupt jumping when passing thresholds)
+      smoothStageMult += (targetStageMult - smoothStageMult) * 0.05;
 
       // Rhythmic Beat Kick Detection (requires genuine rising edge & composed cooldown)
       const bassDelta = bassRaw - lastBassRaw;
@@ -263,20 +265,20 @@
 
       let isBeatKick = false;
       let kickIntensity = 0;
-      if (bassDelta > 0.14 && (now - lastBeatKickTime) > 280) {
+      if (bassDelta > 0.18 && (now - lastBeatKickTime) > 360) {
         isBeatKick = true;
-        kickIntensity = Math.min(1.0, bassDelta * 3.0);
+        kickIntensity = Math.min(1.0, bassDelta * 2.5);
         lastBeatKickTime = now;
       }
 
-      // Composed Rhythmic Flow Dynamics
-      const flowSpeed = 1.8 + smoothBassEnergy * 3.6 + smoothMidEnergy * 2.4;
+      // Composed, gentle rhythmic flow dynamics
+      const flowSpeed = 1.2 + smoothBassEnergy * 2.2 + smoothMidEnergy * 1.5;
       flowPhase += flowSpeed * dt;
 
       if (isBeatKick) {
-        rhythmicSwell = Math.min(0.75, rhythmicSwell + 0.40 + kickIntensity * 0.35);
+        rhythmicSwell = Math.min(0.40, rhythmicSwell + 0.18 + kickIntensity * 0.15);
       } else {
-        rhythmicSwell *= 0.92;
+        rhythmicSwell *= 0.95;
       }
 
       // Sync into shared musical state
@@ -292,54 +294,53 @@
 
       const baseInner = innerRadius;
 
-      // Controlled Beat Scaling & Glow on Center Album Artwork (composed, gentle bounce)
+      // Controlled Beat Scaling & Glow on Center Album Artwork (calm, subtle breath)
       if (albumBox) {
-        const discScale = 1.0 + smoothBassEnergy * 0.055 + rhythmicSwell * 0.045;
-        const glowSpread = 28 + smoothBassEnergy * 35 + rhythmicSwell * 25;
-        const glowAlpha = 0.30 + smoothBassEnergy * 0.35 + rhythmicSwell * 0.20;
+        const discScale = 1.0 + smoothBassEnergy * 0.025 + rhythmicSwell * 0.015;
+        const glowSpread = 25 + smoothBassEnergy * 22 + rhythmicSwell * 12;
+        const glowAlpha = 0.26 + smoothBassEnergy * 0.22 + rhythmicSwell * 0.12;
 
         albumBox.style.transform = `scale(${discScale})`;
-        albumBox.style.boxShadow = `0 0 ${glowSpread}px rgba(255, 20, 60, ${glowAlpha}), 0 0 ${glowSpread * 1.8}px rgba(99, 102, 241, ${glowAlpha * 0.50})`;
+        albumBox.style.boxShadow = `0 0 ${glowSpread}px rgba(255, 20, 60, ${glowAlpha}), 0 0 ${glowSpread * 1.6}px rgba(99, 102, 241, ${glowAlpha * 0.40})`;
 
-        if (beatStage === 3 && smoothBassEnergy > 0.65 && shockwaveAlpha <= 0.1) {
+        if (beatStage === 3 && smoothBassEnergy > 0.78 && shockwaveAlpha <= 0.05) {
           shockwaveRadius = baseInner;
-          shockwaveAlpha = 0.85;
+          shockwaveAlpha = 0.70;
         }
       }
 
-      // Draw expanding beat shockwave ring inside showcase if active
+      // Draw expanding beat shockwave ring inside showcase only on true climaxes
       if (shockwaveAlpha > 0.02) {
         canvasCtx.beginPath();
         canvasCtx.arc(cx, cy, shockwaveRadius, 0, Math.PI * 2);
         canvasCtx.strokeStyle = `rgba(255, 50, 75, ${shockwaveAlpha})`;
-        canvasCtx.lineWidth = 2.4;
+        canvasCtx.lineWidth = 2.0;
         canvasCtx.stroke();
-        shockwaveRadius += 4.0 + smoothBassEnergy * 2.0;
-        shockwaveAlpha *= 0.91;
+        shockwaveRadius += 3.5 + smoothBassEnergy * 1.5;
+        shockwaveAlpha *= 0.92;
       }
 
-      // 1. Draw Audio-Reactive Glowing Base Track Ring
-      const currentInnerCenter = baseInner + (smoothBassEnergy * 5) + (rhythmicSwell * 3.5);
+      // 1. Draw Audio-Reactive Glowing Base Track Ring (stable and serene)
+      const currentInnerCenter = baseInner + (smoothBassEnergy * 3.0);
       canvasCtx.beginPath();
       canvasCtx.arc(cx, cy, currentInnerCenter, 0, Math.PI * 2);
-      canvasCtx.strokeStyle = `rgba(255, 30, 60, ${0.25 + smoothBassEnergy * 0.35})`;
-      canvasCtx.lineWidth = 1.8 + smoothBassEnergy * 1.2;
+      canvasCtx.strokeStyle = `rgba(255, 30, 60, ${0.22 + smoothBassEnergy * 0.25})`;
+      canvasCtx.lineWidth = 1.6 + smoothBassEnergy * 0.8;
       canvasCtx.stroke();
 
       // 2. Draw Rotating Outer Celestial Orbit Ring
-      const orbitRadius = baseInner + maxExtension * (0.68 + smoothBassEnergy * 0.22);
+      const orbitRadius = baseInner + maxExtension * (0.68 + smoothBassEnergy * 0.18);
       canvasCtx.beginPath();
       canvasCtx.arc(cx, cy, orbitRadius, 0, Math.PI * 2);
-      canvasCtx.strokeStyle = `rgba(99, 102, 241, ${0.10 + smoothMidEnergy * 0.20})`;
-      canvasCtx.lineWidth = 1.2;
-      canvasCtx.lineDashOffset = -flowPhase * 14;
-      canvasCtx.setLineDash([7, 11]);
+      canvasCtx.strokeStyle = `rgba(99, 102, 241, ${0.09 + smoothMidEnergy * 0.16})`;
+      canvasCtx.lineWidth = 1.1;
+      canvasCtx.lineDashOffset = -flowPhase * 10;
+      canvasCtx.setLineDash([7, 12]);
       canvasCtx.stroke();
       canvasCtx.setLineDash([]);
 
       // Map 48 logarithmic bands mirrored symmetrically around 96 radial lines
       const halfCount = RADIAL_BAR_COUNT / 2;
-      const beatDancePulse = 1.0 + smoothBassEnergy * 0.28 + (isBeatKick ? kickIntensity * 0.24 : 0);
       const tips = new Array(RADIAL_BAR_COUNT);
 
       for (let i = 0; i < RADIAL_BAR_COUNT; i++) {
@@ -352,53 +353,48 @@
         const frac = binIdx - low;
         let val = dataArray[low] * (1 - frac) + dataArray[high] * frac;
 
-        // Controlled treble curve with lively stage multiplier
-        const boost = (1.0 + Math.pow(norm, 0.6) * 0.5) * stageLengthMult;
+        // Controlled treble curve with smooth stage multiplier
+        const boost = (1.0 + Math.pow(norm, 0.6) * 0.4) * smoothStageMult;
         val = Math.min(255, val * boost);
 
-        // Power curve (1.20) for rich, stable dynamic range
-        const normalizedPower = Math.pow(val / 255, 1.20);
+        // Power curve (1.25) for rich, stable dynamic range
+        const normalizedPower = Math.pow(val / 255, 1.25);
 
-        // Continuous Rhythmic Flowing Harmonics (composed amplitude)
+        // Continuous Gentle Rhythmic Flowing Harmonics (soft 4-6px subtle undulation)
         const angle = (i / RADIAL_BAR_COUNT) * Math.PI * 2 - Math.PI / 2;
-        const wave1 = Math.sin(angle * 3 + flowPhase * 1.2) * (smoothBassEnergy * 10 + smoothMidEnergy * 6);
-        const wave2 = Math.cos(angle * 6 - flowPhase * 1.5) * (smoothBassEnergy * 6 + smoothTrebleEnergy * 5);
-        const wave3 = Math.sin(angle * 9 + flowPhase * 2.2) * (smoothMidEnergy * 4);
-        const rhythmicFlow = wave1 + wave2 + wave3;
+        const wave1 = Math.sin(angle * 3 + flowPhase * 0.9) * (smoothBassEnergy * 5.0 + smoothMidEnergy * 3.0);
+        const wave2 = Math.cos(angle * 5 - flowPhase * 1.1) * (smoothBassEnergy * 3.5 + smoothTrebleEnergy * 2.5);
+        const rhythmicFlow = wave1 + wave2;
 
-        const beatSurge = 1.0 + smoothBassEnergy * 0.28 + rhythmicSwell * 0.24;
+        const beatSurge = 1.0 + smoothBassEnergy * 0.15 + rhythmicSwell * 0.10;
         const targetLen = Math.max(6, (normalizedPower * maxExtension * beatSurge) + rhythmicFlow);
 
-        // Composed, silky attack & smooth decay
+        // Silky, composed attack & decay (eliminates twitchy/spastic jumping)
         if (targetLen >= radialHeights[i]) {
-          radialHeights[i] += (targetLen - radialHeights[i]) * 0.38;
+          radialHeights[i] += (targetLen - radialHeights[i]) * 0.20; // very smooth, gentle rise
           if (targetLen > maxExtension * 0.55 && beatStage >= 2) {
             radialPeakHolds[i] = peakHoldDuration;
           }
         } else {
           if (radialPeakHolds[i] > 0) {
             radialPeakHolds[i]--;
-            radialHeights[i] = Math.max(targetLen, radialHeights[i] * 0.988);
+            radialHeights[i] = Math.max(targetLen, radialHeights[i] * 0.992);
           } else {
-            radialHeights[i] += (targetLen - radialHeights[i]) * 0.14;
+            radialHeights[i] += (targetLen - radialHeights[i]) * 0.08; // smooth, steady fall
           }
         }
 
-        // Peak dots physics with kick bounce
+        // Peak dots physics (gentle floating crest)
         if (radialHeights[i] >= radialPeaks[i]) {
           radialPeaks[i] = radialHeights[i];
           radialPeakSpeeds[i] = 0;
         } else {
-          radialPeakSpeeds[i] += 0.28;
+          radialPeakSpeeds[i] += 0.20;
           radialPeaks[i] = Math.max(0, radialPeaks[i] - radialPeakSpeeds[i]);
         }
-        if (isBeatKick) {
-          radialPeaks[i] = Math.max(radialPeaks[i], radialHeights[i] + kickIntensity * 3.5);
-        }
 
-        // Base circle ripples harmonically with the rhythmic flow
-        const baseWave = Math.sin(angle * 6 + flowPhase * 1.0) * (smoothBassEnergy * 3.5 + rhythmicSwell * 2.0);
-        const currentInner = baseInner + (smoothBassEnergy * 5) + (rhythmicSwell * 3.5) + baseWave;
+        // Base circle remains steady and circular (no high-frequency distortion)
+        const currentInner = baseInner + (smoothBassEnergy * 3.0);
 
         const cosA = Math.cos(angle);
         const sinA = Math.sin(angle);
@@ -410,7 +406,7 @@
 
         tips[i] = { x: x2, y: y2 };
 
-        // Dynamic Line Gradient (shifts hotter & more vivid on beats)
+        // Dynamic Line Gradient (shifts smoothly with beat stage)
         const lineGrad = canvasCtx.createLinearGradient(x1, y1, x2, y2);
         if (beatStage === 3) {
           lineGrad.addColorStop(0, '#e11d48');   // rose
@@ -428,26 +424,26 @@
           lineGrad.addColorStop(1.0, '#ff4422');
         }
 
-        // Render Radial Ray with audio-reactive width
+        // Render Radial Ray with steady width
         canvasCtx.beginPath();
         canvasCtx.moveTo(x1, y1);
         canvasCtx.lineTo(x2, y2);
         canvasCtx.strokeStyle = lineGrad;
-        canvasCtx.lineWidth = (beatStage === 3 ? 3.0 : 2.6) + smoothBassEnergy * 0.6;
+        canvasCtx.lineWidth = (beatStage === 3 ? 2.8 : 2.5) + smoothBassEnergy * 0.4;
         canvasCtx.lineCap = 'round';
         canvasCtx.stroke();
 
         // Render Floating Glowing Peak Orb
         if (radialPeaks[i] > 7) {
-          const peakDist = currentInner + radialPeaks[i] + 3.8;
+          const peakDist = currentInner + radialPeaks[i] + 3.6;
           const px = cx + cosA * peakDist;
           const py = cy + sinA * peakDist;
 
           canvasCtx.beginPath();
-          canvasCtx.arc(px, py, beatStage === 3 ? (2.6 + smoothBassEnergy * 0.8) : 1.9, 0, Math.PI * 2);
+          canvasCtx.arc(px, py, beatStage === 3 ? (2.4 + smoothBassEnergy * 0.5) : 1.8, 0, Math.PI * 2);
           canvasCtx.fillStyle = beatStage === 3 ? '#fff5cc' : (beatStage === 2 ? '#ffeedd' : '#ffe0cc');
           canvasCtx.shadowColor = beatStage === 3 ? '#ffaa00' : '#ff2200';
-          canvasCtx.shadowBlur = beatStage === 3 ? 10 : (beatStage === 2 ? 6 : 4);
+          canvasCtx.shadowBlur = beatStage === 3 ? 8 : (beatStage === 2 ? 5 : 3);
           canvasCtx.fill();
           canvasCtx.shadowBlur = 0;
         }
@@ -470,13 +466,13 @@
       }
       canvasCtx.closePath();
 
-      const ribbonAlpha = 0.24 + smoothBassEnergy * 0.28 + rhythmicSwell * 0.20;
+      const ribbonAlpha = 0.20 + smoothBassEnergy * 0.22 + rhythmicSwell * 0.15;
       canvasCtx.strokeStyle = beatStage === 3 
         ? `rgba(255, 204, 0, ${ribbonAlpha})` 
         : (beatStage === 2 ? `rgba(255, 68, 102, ${ribbonAlpha})` : `rgba(255, 51, 75, ${ribbonAlpha * 0.70})`);
-      canvasCtx.lineWidth = 1.6 + smoothBassEnergy * 1.0;
+      canvasCtx.lineWidth = 1.4 + smoothBassEnergy * 0.8;
       canvasCtx.shadowColor = beatStage === 3 ? '#ffaa00' : '#ff0033';
-      canvasCtx.shadowBlur = beatStage === 3 ? 11 : 6;
+      canvasCtx.shadowBlur = beatStage === 3 ? 9 : 5;
       canvasCtx.stroke();
       canvasCtx.shadowBlur = 0;
     }
@@ -1348,7 +1344,7 @@
     // Render Controlled Rhythmic Auroras (Silk Wave Ribbons)
     function drawRhythmicRibbon(yRatio, col1, col2, freq, speed, ampScale) {
       const baseY = height * yRatio;
-      const amp = (10 + musicalState.bass * 22 + musicalState.mids * 14) * ampScale;
+      const amp = (8 + musicalState.bass * 14 + musicalState.mids * 8) * ampScale;
 
       ctx.beginPath();
       const step = 24;
@@ -1361,13 +1357,13 @@
       }
 
       const grad = ctx.createLinearGradient(0, baseY - amp, width, baseY + amp);
-      const alpha = 0.04 + musicalState.bass * 0.06;
+      const alpha = 0.035 + musicalState.bass * 0.04;
       grad.addColorStop(0, `rgba(${col1.r}, ${col1.g}, ${col1.b}, ${alpha * 0.2})`);
       grad.addColorStop(0.5, `rgba(${col2.r}, ${col2.g}, ${col2.b}, ${alpha})`);
       grad.addColorStop(1, `rgba(${col1.r}, ${col1.g}, ${col1.b}, ${alpha * 0.1})`);
 
       ctx.strokeStyle = grad;
-      ctx.lineWidth = 2.0 + musicalState.bass * 1.5;
+      ctx.lineWidth = 1.8 + musicalState.bass * 1.0;
       ctx.stroke();
     }
 
@@ -1390,20 +1386,20 @@
       const isPlaying = musicalState.isPlaying;
       const musicBoost = musicalState.bass;
 
-      // Trigger Beat Wave on fresh musical beat kick
+      // Trigger Beat Wave on fresh musical beat kick (calm, rare drop pulses)
       if (isPlaying && musicalState.beatKick && musicalState.time !== lastProcessedBeatTime) {
         lastProcessedBeatTime = musicalState.time;
         spawnMusicBeatWave(musicalState.beatStage, musicalState.kickIntensity);
         // Gentle buoyant lift on dancing embers
         for (let i = 0; i < celestialEmbers.length; i++) {
-          celestialEmbers[i].lift = Math.min(14, celestialEmbers[i].lift + (3.5 + Math.random() * 4.5) * musicalState.kickIntensity);
+          celestialEmbers[i].lift = Math.min(8, celestialEmbers[i].lift + (1.5 + Math.random() * 2.0) * musicalState.kickIntensity);
         }
       }
 
       // 1. Dynamic Cursor Spotlight Glow (composed breathing)
       const isRecent = (Date.now() - lastMoveTime) < 4000;
-      const spotlightAlpha = isRecent ? (0.85 + musicBoost * 0.25) : Math.max(0.2, 0.85 - (Date.now() - lastMoveTime - 4000) / 3000);
-      const baseRadius = 220 + Math.min(mouseSpeed * 3, 100) + (musicBoost * 55);
+      const spotlightAlpha = isRecent ? (0.85 + musicBoost * 0.18) : Math.max(0.2, 0.85 - (Date.now() - lastMoveTime - 4000) / 3000);
+      const baseRadius = 220 + Math.min(mouseSpeed * 3, 100) + (musicBoost * 35);
 
       const spot = ctx.createRadialGradient(lerpX, lerpY, 0, lerpX, lerpY, baseRadius);
       spot.addColorStop(0, `rgba(255, 255, 255, ${0.08 * spotlightAlpha})`);
@@ -1429,8 +1425,8 @@
       }
 
       // 3. Render Controlled Rhythmic Auroras (Silk Wave Ribbons)
-      drawRhythmicRibbon(0.72, PALETTES[2], PALETTES[1], 0.0025, 1.1, 1.0); // Cyan & Indigo
-      drawRhythmicRibbon(0.85, PALETTES[0], PALETTES[3], 0.0032, -0.9, 0.85); // Crimson & Rose
+      drawRhythmicRibbon(0.72, PALETTES[2], PALETTES[1], 0.0025, 0.8, 1.0); // Cyan & Indigo
+      drawRhythmicRibbon(0.85, PALETTES[0], PALETTES[3], 0.0032, -0.7, 0.85); // Crimson & Rose
 
       // 4. Render Dancing Celestial Embers (composed, gentle rhythmic sway)
       for (let i = 0; i < celestialEmbers.length; i++) {
@@ -1445,14 +1441,14 @@
 
         // Controlled rhythmic dancing math
         const bob = isPlaying
-          ? (Math.sin(t * ember.danceFreq * 2.4 + ember.phase) * (1.2 + musicalState.mids * 3.8) - ember.lift)
+          ? (Math.sin(t * ember.danceFreq * 2.0 + ember.phase) * (1.0 + musicalState.mids * 2.2) - ember.lift)
           : Math.sin(t * 0.8 + ember.phase) * 1.5;
 
         const sway = isPlaying
-          ? (Math.cos(t * ember.danceFreq * 1.8 + ember.phase) * (0.9 + musicalState.treble * 2.6))
+          ? (Math.cos(t * ember.danceFreq * 1.5 + ember.phase) * (0.8 + musicalState.treble * 1.6))
           : Math.cos(t * 0.6 + ember.phase) * 1.2;
 
-        ember.lift *= 0.91;
+        ember.lift *= 0.93;
 
         const twinkle = Math.sin(t * 5 + ember.phase) * 0.25 + 0.75;
         const audioGlow = isPlaying ? (1 + musicalState.bass * 0.7 + musicalState.treble * 0.5) : 1;

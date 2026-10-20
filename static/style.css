@@ -444,11 +444,11 @@ body {
   gap: 10px;
 }
 
-/* Album Showcase & Radial Visualizer - 1:1 Square with Equal Space on Left/Right and Up/Down */
+/* Album Showcase & Radial Visualizer */
 .album-showcase {
   position: relative;
   width: 100%;
-  aspect-ratio: 1 / 1;
+  height: clamp(420px, 50vh, 480px);
   background: radial-gradient(circle at center, rgba(38, 18, 44, 0.55) 0%, rgba(15, 23, 42, 0.7) 55%, rgba(11, 15, 25, 0.9) 100%);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
