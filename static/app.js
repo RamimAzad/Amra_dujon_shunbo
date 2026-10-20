@@ -934,4 +934,342 @@
     });
   }
 
+  /* =========================================================
+     SPOKENGUIDE-STYLE AMBIENT CANVAS & CURSOR MOVEMENT EFFECT
+     ========================================================= */
+  function initAmbientCanvas() {
+    const ambientCanvas = document.getElementById('ambientCanvas');
+    if (!ambientCanvas) return;
+    const ctx = ambientCanvas.getContext('2d');
+    if (!ctx) return;
+
+    let width = 0;
+    let height = 0;
+
+    function resize() {
+      width = ambientCanvas.width = window.innerWidth;
+      height = ambientCanvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Mouse / Pointer Tracking
+    let targetX = width / 2;
+    let targetY = height / 2;
+    let lerpX = width / 2;
+    let lerpY = height / 2;
+    let prevX = width / 2;
+    let prevY = height / 2;
+    let lastSpawnX = width / 2;
+    let lastSpawnY = height / 2;
+    let mouseSpeed = 0;
+    let lastMoveTime = Date.now();
+
+    const orbs = {
+      orb1: document.querySelector('.orb-1'),
+      orb2: document.querySelector('.orb-2'),
+      orb3: document.querySelector('.orb-3'),
+      orb4: document.querySelector('.orb-4'),
+    };
+
+    // Color palettes inspired by spokenguide & tailored to amra-shunbo
+    const PALETTES = [
+      { r: 255, g: 51, b: 75, name: 'crimson' },   // amra-shunbo red
+      { r: 99, g: 102, b: 241, name: 'indigo' },   // spokenguide indigo
+      { r: 6, g: 182, b: 212, name: 'cyan' },      // cyber cyan
+      { r: 244, g: 63, b: 94, name: 'rose' },      // lotus rose
+      { r: 168, g: 85, b: 247, name: 'violet' },   // cosmic violet
+      { r: 251, g: 191, b: 36, name: 'gold' }      // starlight gold
+    ];
+
+    const ripples = [];
+    const stars = [];
+    const MAX_RIPPLES = 45;
+    const MAX_STARS = 70;
+
+    function getRandomColor() {
+      return PALETTES[Math.floor(Math.random() * PALETTES.length)];
+    }
+
+    function spawnRipple(x, y, vx, vy, isClick = false) {
+      if (ripples.length >= MAX_RIPPLES) {
+        ripples.shift();
+      }
+      const color = getRandomColor();
+      const styles = ['organic', 'bloom', 'star', 'fluid'];
+      const style = isClick ? 'bloom' : styles[Math.floor(Math.random() * styles.length)];
+      const maxRadius = isClick ? (Math.random() * 60 + 170) : (Math.random() * 50 + 95);
+      const speed = isClick ? 2.6 : (Math.random() * 0.8 + 1.2);
+      const initialAlpha = isClick ? 0.65 : (Math.random() * 0.15 + 0.35);
+
+      ripples.push({
+        x,
+        y,
+        radius: isClick ? 12 : 5,
+        maxRadius,
+        speed,
+        alpha: initialAlpha,
+        color,
+        style,
+        seed: Math.random() * 200,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.02,
+        vx: vx * 0.25 + (Math.random() - 0.5) * 0.3,
+        vy: vy * 0.25 + (Math.random() - 0.5) * 0.3,
+        isClick
+      });
+    }
+
+    function spawnStar(x, y, vx, vy, isClick = false) {
+      if (stars.length >= MAX_STARS) {
+        stars.shift();
+      }
+      const count = isClick ? 8 : 1;
+      for (let k = 0; k < count; k++) {
+        const angle = isClick ? ((k / count) * Math.PI * 2 + Math.random() * 0.2) : (Math.random() * Math.PI * 2);
+        const force = isClick ? (Math.random() * 3 + 1.5) : (Math.random() * 0.8 + 0.2);
+        const color = getRandomColor();
+        stars.push({
+          x: x + (Math.random() - 0.5) * 6,
+          y: y + (Math.random() - 0.5) * 6,
+          vx: Math.cos(angle) * force + vx * 0.15,
+          vy: Math.sin(angle) * force + vy * 0.15,
+          size: Math.random() * 2 + 1.2,
+          alpha: Math.random() * 0.4 + 0.5,
+          maxLife: Math.random() * 40 + 35,
+          life: 0,
+          color,
+          seed: Math.random() * 100
+        });
+      }
+    }
+
+    // Pointer movement tracking
+    function onPointerMove(e) {
+      lastMoveTime = Date.now();
+      targetX = e.clientX;
+      targetY = e.clientY;
+
+      const dx = targetX - lastSpawnX;
+      const dy = targetY - lastSpawnY;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist > 7) {
+        const vx = (targetX - prevX);
+        const vy = (targetY - prevY);
+        spawnRipple(targetX, targetY, vx, vy, false);
+        if (Math.random() < 0.45) {
+          spawnStar(targetX, targetY, vx, vy, false);
+        }
+        lastSpawnX = targetX;
+        lastSpawnY = targetY;
+      }
+      prevX = targetX;
+      prevY = targetY;
+    }
+
+    function onPointerDown(e) {
+      targetX = e.clientX;
+      targetY = e.clientY;
+      spawnRipple(targetX, targetY, 0, 0, true);
+      spawnStar(targetX, targetY, 0, 0, true);
+    }
+
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerdown', onPointerDown, { passive: true });
+    window.addEventListener('touchmove', (e) => {
+      if (e.touches && e.touches[0]) {
+        onPointerMove(e.touches[0]);
+      }
+    }, { passive: true });
+    window.addEventListener('touchstart', (e) => {
+      if (e.touches && e.touches[0]) {
+        onPointerDown(e.touches[0]);
+      }
+    }, { passive: true });
+
+    let t = 0;
+
+    function renderAmbient() {
+      requestAnimationFrame(renderAmbient);
+
+      if (document.hidden) return;
+
+      t += 0.02;
+
+      // Smooth lerp for cursor coordinates
+      lerpX += (targetX - lerpX) * 0.14;
+      lerpY += (targetY - lerpY) * 0.14;
+
+      const curSpeed = Math.hypot(targetX - lerpX, targetY - lerpY);
+      mouseSpeed += (curSpeed - mouseSpeed) * 0.1;
+
+      ctx.clearRect(0, 0, width, height);
+
+      // Music reactive audio energy factor
+      const musicBoost = (typeof smoothBassEnergy !== 'undefined' ? smoothBassEnergy : 0);
+
+      // 1. Dynamic Cursor Spotlight Glow
+      const isRecent = (Date.now() - lastMoveTime) < 4000;
+      const spotlightAlpha = isRecent ? (0.85 + musicBoost * 0.35) : Math.max(0.2, 0.85 - (Date.now() - lastMoveTime - 4000) / 3000);
+      const baseRadius = 220 + Math.min(mouseSpeed * 3, 100) + (musicBoost * 70);
+
+      const spot = ctx.createRadialGradient(lerpX, lerpY, 0, lerpX, lerpY, baseRadius);
+      spot.addColorStop(0, `rgba(255, 255, 255, ${0.08 * spotlightAlpha})`);
+      spot.addColorStop(0.22, `rgba(255, 51, 75, ${0.11 * spotlightAlpha})`);
+      spot.addColorStop(0.5, `rgba(99, 102, 241, ${0.09 * spotlightAlpha})`);
+      spot.addColorStop(0.78, `rgba(6, 182, 212, ${0.04 * spotlightAlpha})`);
+      spot.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+      ctx.beginPath();
+      ctx.arc(lerpX, lerpY, baseRadius, 0, Math.PI * 2);
+      ctx.fillStyle = spot;
+      ctx.fill();
+
+      // 2. 3D Parallax on ambient floating orbs
+      const tiltX = (lerpX / width) * 2 - 1;
+      const tiltY = (lerpY / height) * 2 - 1;
+      if (orbs.orb1) orbs.orb1.style.transform = `translate3d(${tiltX * -35}px, ${tiltY * -30}px, 0)`;
+      if (orbs.orb2) orbs.orb2.style.transform = `translate3d(${tiltX * 40}px, ${tiltY * 35}px, 0)`;
+      if (orbs.orb3) orbs.orb3.style.transform = `translate3d(${tiltX * -25}px, ${tiltY * 30}px, 0)`;
+      if (orbs.orb4) orbs.orb4.style.transform = `translate3d(${tiltX * 30}px, ${tiltY * -25}px, 0)`;
+
+      // 3. Render Ripples (spokenguide style)
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        const p = ripples[i];
+        p.radius += p.speed;
+        p.rotation += p.rotationSpeed;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.98;
+        p.vy *= 0.98;
+
+        const progress = p.radius / p.maxRadius;
+        const currentAlpha = Math.max(0, (1 - progress) * p.alpha * (1 + musicBoost * 0.4));
+
+        if (progress >= 1 || currentAlpha <= 0.005) {
+          ripples.splice(i, 1);
+          continue;
+        }
+
+        const col = p.color;
+
+        if (p.style === 'organic') {
+          ctx.beginPath();
+          const segments = 36;
+          for (let s = 0; s <= segments; s++) {
+            const angle = (s / segments) * Math.PI * 2 + p.rotation;
+            const wave = Math.sin(angle * 3 + p.seed + t * 2) * (p.radius * 0.12)
+                       + Math.cos(angle * 5 - p.seed) * (p.radius * 0.06);
+            const r = Math.max(2, p.radius + wave);
+            const px = p.x + Math.cos(angle) * r;
+            const py = p.y + Math.sin(angle) * r;
+            if (s === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+
+          const grad = ctx.createRadialGradient(p.x, p.y, p.radius * 0.1, p.x, p.y, p.radius);
+          grad.addColorStop(0, `rgba(${col.r}, ${col.g}, ${col.b}, ${currentAlpha * 0.25})`);
+          grad.addColorStop(0.6, `rgba(${col.r}, ${col.g}, ${col.b}, ${currentAlpha * 0.08})`);
+          grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          ctx.fillStyle = grad;
+          ctx.fill();
+
+          ctx.strokeStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${currentAlpha * 0.45})`;
+          ctx.lineWidth = p.isClick ? 1.8 : 1.1;
+          ctx.stroke();
+
+        } else if (p.style === 'bloom') {
+          // Petal/Bloom shape
+          const petalCount = 6;
+          const petalLen = p.radius * 0.48;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
+          for (let k = 0; k < petalCount; k++) {
+            ctx.rotate((Math.PI * 2) / petalCount);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.quadraticCurveTo(-petalLen * 0.5, petalLen * 0.5, 0, petalLen);
+            ctx.quadraticCurveTo(petalLen * 0.5, petalLen * 0.5, 0, 0);
+            ctx.closePath();
+            ctx.fillStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${currentAlpha * 0.16})`;
+            ctx.fill();
+            ctx.strokeStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${currentAlpha * 0.42})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+          ctx.restore();
+
+        } else if (p.style === 'star') {
+          // Twinkling core star
+          const grad = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, p.radius * 0.45);
+          grad.addColorStop(0, `rgba(255, 255, 255, ${currentAlpha * 0.85})`);
+          grad.addColorStop(0.35, `rgba(${col.r}, ${col.g}, ${col.b}, ${currentAlpha * 0.5})`);
+          grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius * 0.45, 0, Math.PI * 2);
+          ctx.fillStyle = grad;
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+
+        } else {
+          // Fluid expanding ring
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${currentAlpha * 0.45})`;
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+
+          if (p.radius > 20) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius - 14, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${currentAlpha * 0.2})`;
+            ctx.lineWidth = 0.7;
+            ctx.stroke();
+          }
+        }
+      }
+
+      // 4. Render Stars / Sparks
+      for (let j = stars.length - 1; j >= 0; j--) {
+        const star = stars[j];
+        star.life++;
+        star.x += star.vx;
+        star.y += star.vy;
+        star.vx *= 0.96;
+        star.vy *= 0.96;
+
+        const progress = star.life / star.maxLife;
+        const currentAlpha = Math.max(0, (1 - progress) * star.alpha);
+
+        if (progress >= 1 || currentAlpha <= 0.01) {
+          stars.splice(j, 1);
+          continue;
+        }
+
+        const twinkle = 0.7 + 0.3 * Math.sin(t * 8 + star.seed);
+        const col = star.color;
+
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.size * (1 - progress * 0.3), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${currentAlpha * twinkle})`;
+        ctx.shadowColor = `rgba(${col.r}, ${col.g}, ${col.b}, 0.8)`;
+        ctx.shadowBlur = 6;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    renderAmbient();
+  }
+
+  // Initialize interactive ambient background
+  initAmbientCanvas();
+
 })();

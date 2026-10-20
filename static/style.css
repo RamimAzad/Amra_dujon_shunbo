@@ -1,27 +1,33 @@
-/* YouTube Music Design System */
+/* amra-shunbo - Modern Cosmic Glassmorphic Design System (spokenguide inspired) */
 :root {
-  --ytm-bg-base: #030303;
-  --ytm-bg-elevated: #0f0f0f;
-  --ytm-bg-card: #181818;
-  --ytm-bg-overlay: #212121;
-  --ytm-bg-input: #121212;
-  --ytm-border: rgba(255, 255, 255, 0.1);
-  --ytm-border-subtle: rgba(255, 255, 255, 0.06);
+  --ytm-bg-base: #0b0f19;
+  --ytm-bg-elevated: rgba(15, 23, 42, 0.72);
+  --ytm-bg-card: rgba(15, 23, 42, 0.65);
+  --ytm-bg-overlay: rgba(11, 15, 29, 0.9);
+  --ytm-bg-input: rgba(15, 23, 42, 0.8);
+  --ytm-border: rgba(255, 255, 255, 0.08);
+  --ytm-border-glow: rgba(99, 102, 241, 0.25);
+  --ytm-border-subtle: rgba(255, 255, 255, 0.04);
 
-  --ytm-red: #ff0000;
-  --ytm-red-hover: #cc0000;
-  --ytm-red-glow: rgba(255, 0, 0, 0.35);
+  --ytm-red: #ff334b;
+  --ytm-red-hover: #e0243d;
+  --ytm-red-glow: rgba(255, 51, 75, 0.35);
 
-  --ytm-text-primary: #ffffff;
-  --ytm-text-secondary: #aaaaaa;
-  --ytm-text-tertiary: #717171;
+  --ytm-indigo: #6366f1;
+  --ytm-indigo-glow: rgba(99, 102, 241, 0.3);
+  --ytm-cyan: #06b6d4;
+
+  --ytm-text-primary: #f8fafc;
+  --ytm-text-secondary: #94a3b8;
+  --ytm-text-tertiary: #64748b;
 
   --ytm-radius-pill: 9999px;
-  --ytm-radius-card: 8px;
-  --ytm-radius-md: 8px;
+  --ytm-radius-card: 16px;
+  --ytm-radius-md: 10px;
 
   --ytm-font: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Oxygen, Ubuntu, Cantarell, sans-serif;
-  --transition-fast: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --glass-blur: blur(20px) saturate(160%);
 }
 
 * {
@@ -39,6 +45,109 @@ body {
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
+  position: relative;
+}
+
+/* =========================================
+   SPOKENGUIDE-STYLE AMBIENT BACKGROUND & ORBS
+========================================= */
+.ambient-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 1;
+  mix-blend-mode: screen;
+}
+
+.ambient-orbs {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ambient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.5;
+  transition: transform 0.2s cubic-bezier(0.1, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+.orb-1 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, rgba(99, 102, 241, 0) 70%);
+  top: -80px;
+  left: 5%;
+  animation: orbFloat1 24s ease-in-out infinite alternate;
+}
+
+.orb-2 {
+  width: 540px;
+  height: 540px;
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.25) 0%, rgba(239, 68, 68, 0) 70%);
+  top: 25%;
+  right: -120px;
+  animation: orbFloat2 28s ease-in-out infinite alternate;
+}
+
+.orb-3 {
+  width: 460px;
+  height: 460px;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.22) 0%, rgba(6, 182, 212, 0) 70%);
+  bottom: -60px;
+  left: 20%;
+  animation: orbFloat3 22s ease-in-out infinite alternate;
+}
+
+.orb-4 {
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.2) 0%, rgba(168, 85, 247, 0) 70%);
+  top: 60%;
+  left: 55%;
+  animation: orbFloat4 26s ease-in-out infinite alternate;
+}
+
+@keyframes orbFloat1 {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(40px, 30px) scale(1.08); }
+  100% { transform: translate(-30px, 60px) scale(0.95); }
+}
+
+@keyframes orbFloat2 {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-50px, -40px) scale(1.12); }
+  100% { transform: translate(20px, 40px) scale(0.92); }
+}
+
+@keyframes orbFloat3 {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(50px, -30px) scale(1.05); }
+  100% { transform: translate(-40px, 20px) scale(1.1); }
+}
+
+@keyframes orbFloat4 {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-30px, 40px) scale(1.15); }
+  100% { transform: translate(40px, -20px) scale(0.9); }
+}
+
+.ambient-grid-overlay {
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.55;
+  mask-image: radial-gradient(ellipse at center, rgba(0, 0, 0, 1) 45%, rgba(0, 0, 0, 0.15) 100%);
+  -webkit-mask-image: radial-gradient(ellipse at center, rgba(0, 0, 0, 1) 45%, rgba(0, 0, 0, 0.15) 100%);
 }
 
 /* =========================================
@@ -47,8 +156,9 @@ body {
 .auth-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(12px);
+  background: rgba(11, 15, 25, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -58,9 +168,11 @@ body {
 
 .auth-card {
   background: var(--ytm-bg-overlay);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--ytm-border);
-  border-radius: 16px;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.9), 0 0 40px rgba(255, 0, 0, 0.1);
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 50px rgba(99, 102, 241, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   width: 100%;
   max-width: 420px;
   padding: 36px 32px;
@@ -174,7 +286,9 @@ body {
 ========================================= */
 .ytm-header {
   height: 48px;
-  background-color: var(--ytm-bg-base);
+  background-color: rgba(11, 15, 25, 0.75);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--ytm-border);
   display: flex;
   align-items: center;
@@ -183,6 +297,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
 
 .ytm-brand {
@@ -222,11 +337,14 @@ body {
   align-items: center;
   gap: 6px;
   background: var(--ytm-bg-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--ytm-border);
   padding: 4px 10px;
   border-radius: var(--ytm-radius-pill);
   font-size: 12px;
   color: var(--ytm-text-secondary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .ytm-room-pill strong {
@@ -256,7 +374,9 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--ytm-border);
   color: var(--ytm-text-primary);
   padding: 4px 12px;
@@ -268,7 +388,8 @@ body {
 }
 
 .ytm-pill-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .listeners-pill {
@@ -284,6 +405,8 @@ body {
   grid-template-columns: minmax(0, 1fr) 320px;
   height: calc(100vh - 48px);
   overflow: hidden;
+  position: relative;
+  z-index: 2;
 }
 
 @media (max-width: 880px) {
@@ -300,6 +423,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  position: relative;
 }
 
 .ytm-player-container {
@@ -315,14 +439,16 @@ body {
   position: relative;
   width: 100%;
   height: clamp(380px, 46vh, 440px);
-  background: radial-gradient(circle at center, #1c0808 0%, #080808 55%, #030303 100%);
-  border: 1px solid var(--ytm-border);
-  border-radius: 16px;
+  background: radial-gradient(circle at center, rgba(32, 18, 38, 0.5) 0%, rgba(15, 23, 42, 0.65) 55%, rgba(11, 15, 25, 0.85) 100%);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.8), 0 0 40px rgba(255, 0, 0, 0.08);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), 0 0 45px rgba(99, 102, 241, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .album-artwork-box {
@@ -599,12 +725,15 @@ body {
 ========================================= */
 .ytm-ingest-shelf {
   background: var(--ytm-bg-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--ytm-border);
-  border-radius: 10px;
+  border-radius: 14px;
   padding: 8px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .ytm-filter-chips {
@@ -768,12 +897,15 @@ body {
 ========================================= */
 .ytm-chat-drawer {
   background: var(--ytm-bg-elevated);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-left: 1px solid var(--ytm-border);
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
 }
 
 .chat-drawer-header {
