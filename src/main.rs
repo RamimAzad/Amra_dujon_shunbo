@@ -45,6 +45,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/rooms/:room_id/verify", post(routes::verify_room))
         .route("/api/rooms/:room_id/upload", post(routes::upload_audio))
         .route("/api/rooms/:room_id/youtube", post(routes::queue_youtube))
+        .route(
+            "/api/rooms/:room_id/youtube-playlist",
+            post(routes::queue_youtube_playlist),
+        )
         .route("/api/rooms/:room_id/ws", get(ws::ws_handler))
         // Direct room link page
         .route(

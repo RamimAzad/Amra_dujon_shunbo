@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>amra-shunbo - Synchronized Room</title>
-  <link rel="stylesheet" href="/static/style.css?v=17">
+  <link rel="stylesheet" href="/static/style.css?v=18">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='16' fill='%23FF0000'/><circle cx='16' cy='16' r='10' stroke='white' stroke-width='2' fill='none'/><polygon points='13,11 22,16 13,21' fill='white'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -170,12 +170,28 @@
                 <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
               </svg>
             </button>
+            <button class="ytm-icon-btn queue-toggle-btn" id="queueToggleBtn" title="Toggle Playlist Queue">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/>
+              </svg>
+              <span class="queue-badge" id="queueBadge" style="display: none;">0</span>
+            </button>
           </div>
 
           <div class="controls-center">
+            <button class="ytm-icon-btn track-nav-btn" id="prevTrackBtn" title="Previous Track">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+              </svg>
+            </button>
             <button class="ytm-play-btn" id="playBtn" title="Synchronized Play / Pause">
               <svg id="playIconSvg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M8 5v14l11-7z"/>
+              </svg>
+            </button>
+            <button class="ytm-icon-btn track-nav-btn" id="nextTrackBtn" title="Next Track">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
               </svg>
             </button>
           </div>
@@ -192,6 +208,21 @@
           </div>
         </div>
 
+        <!-- Collapsible Playlist Queue Drawer -->
+        <div class="ytm-queue-shelf" id="queueShelf" style="display: none;">
+          <div class="queue-header">
+            <div class="queue-title-area">
+              <span class="queue-icon">📑</span>
+              <span class="queue-title-text" id="queueTitleText">Playlist Queue</span>
+              <span class="queue-count-pill" id="queueCountPill">0 tracks</span>
+            </div>
+            <button class="queue-close-btn" id="queueCloseBtn" title="Close Queue">✕</button>
+          </div>
+          <div class="queue-tracklist" id="queueTracklist">
+            <!-- Queue items will be rendered here -->
+          </div>
+        </div>
+
         <!-- Add Music (Ingest Options) Section -->
         <div class="ytm-ingest-shelf">
           <div class="ytm-filter-chips">
@@ -200,6 +231,9 @@
             </button>
             <button class="ytm-chip" id="tabYtBtn">
               <span>▶️ YouTube URL</span>
+            </button>
+            <button class="ytm-chip" id="tabYtPlaylistBtn">
+              <span>📑 YouTube Playlist</span>
             </button>
           </div>
 
@@ -226,6 +260,19 @@
                 </svg>
                 <input type="url" id="ytUrlInput" class="ytm-search-input" placeholder="Paste YouTube link (e.g. https://www.youtube.com/watch?v=...)" required>
                 <button type="submit" class="ytm-btn-red" id="ytSubmitBtn">Load Track</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- YouTube Playlist Content -->
+          <div id="ytPlaylistTabContent" class="ingest-pane" style="display: none;">
+            <form id="ytPlaylistForm" class="ytm-search-form">
+              <div class="ytm-search-box">
+                <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="#888888">
+                  <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/>
+                </svg>
+                <input type="url" id="ytPlaylistUrlInput" class="ytm-search-input" placeholder="Paste YouTube playlist URL (e.g. https://www.youtube.com/playlist?list=...)" required>
+                <button type="submit" class="ytm-btn-red" id="ytPlaylistSubmitBtn">Load Playlist</button>
               </div>
             </form>
           </div>
@@ -268,6 +315,6 @@
   <audio id="audioPlayer" preload="auto" crossorigin="anonymous"></audio>
 
   <!-- Client Script -->
-  <script src="/static/app.js?v=17"></script>
+  <script src="/static/app.js?v=18"></script>
 </body>
 </html>

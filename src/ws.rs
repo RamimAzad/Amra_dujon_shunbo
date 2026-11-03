@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     models::{ClientMessage, ServerMessage},
+    routes,
     state::AppState,
 };
 
@@ -149,6 +150,42 @@ async fn handle_socket(socket: WebSocket, state: AppState, room_id: String) {
                                         let _ = sender.send(Message::Text(
                                             serde_json::to_string(&ServerMessage::Sync(sync)).unwrap()
                                         )).await;
+                                    }
+                                    ClientMessage::NextTrack => {
+                                        let next_idx = room.next_track_index();
+                                        drop(rooms);
+                                        if let Some(idx) = next_idx {
+                                            let state_c = state.clone();
+                                            let r_id = room_id.clone();
+                                            tokio::spawn(async move {
+                                                if let Err(e) = routes::switch_to_track_index(&state_c, &r_id, idx).await {
+                                                    tracing::error!("Error switching to next track: {}", e);
+                                                }
+                                            });
+                                        }
+                                    }
+                                    ClientMessage::PrevTrack => {
+                                        let prev_idx = room.prev_track_index();
+                                        drop(rooms);
+                                        if let Some(idx) = prev_idx {
+                                            let state_c = state.clone();
+                                            let r_id = room_id.clone();
+                                            tokio::spawn(async move {
+                                                if let Err(e) = routes::switch_to_track_index(&state_c, &r_id, idx).await {
+                                                    tracing::error!("Error switching to prev track: {}", e);
+                                                }
+                                            });
+                                        }
+                                    }
+                                    ClientMessage::SelectTrack { index } => {
+                                        drop(rooms);
+                                        let state_c = state.clone();
+                                        let r_id = room_id.clone();
+                                        tokio::spawn(async move {
+                                            if let Err(e) = routes::switch_to_track_index(&state_c, &r_id, index).await {
+                                                tracing::error!("Error switching to selected track: {}", e);
+                                            }
+                                        });
                                     }
                                     ClientMessage::Auth { .. } => {}
                                 }

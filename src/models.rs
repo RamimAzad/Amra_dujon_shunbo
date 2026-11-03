@@ -34,6 +34,9 @@ pub struct RoomSyncState {
     pub server_time_ms: i64,
     pub listeners_count: usize,
     pub listeners: Vec<String>,
+    pub queue: Vec<TrackInfo>,
+    pub current_track_index: usize,
+    pub playlist_title: Option<String>,
 }
 
 // Inbound WebSocket Messages (from Client)
@@ -56,6 +59,12 @@ pub enum ClientMessage {
     Chat { content: String },
     #[serde(rename = "REQUEST_SYNC")]
     RequestSync,
+    #[serde(rename = "NEXT_TRACK")]
+    NextTrack,
+    #[serde(rename = "PREV_TRACK")]
+    PrevTrack,
+    #[serde(rename = "SELECT_TRACK")]
+    SelectTrack { index: usize },
 }
 
 // Outbound WebSocket Messages (to Client)
@@ -115,4 +124,17 @@ pub struct YouTubeRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct YouTubeResponse {
     pub track: TrackInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct YouTubePlaylistRequest {
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct YouTubePlaylistResponse {
+    pub playlist_title: String,
+    pub total_tracks: usize,
+    pub current_track: TrackInfo,
+    pub queue: Vec<TrackInfo>,
 }

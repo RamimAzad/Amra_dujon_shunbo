@@ -660,6 +660,261 @@ body {
   padding: 2px 0;
 }
 
+.controls-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.controls-center {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.track-nav-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--ytm-text-primary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.track-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  transform: scale(1.08);
+  color: #ffffff;
+}
+
+.track-nav-btn:active {
+  transform: scale(0.94);
+}
+
+.track-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.queue-toggle-btn {
+  position: relative;
+}
+
+.queue-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  background: var(--ytm-red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(255, 0, 0, 0.4);
+}
+
+/* =========================================
+   PLAYLIST QUEUE DRAWER & TRACK ITEMS
+========================================= */
+.ytm-queue-shelf {
+  background: rgba(18, 22, 34, 0.85);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  animation: queueFadeIn 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes queueFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 6px;
+}
+
+.queue-title-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.queue-icon {
+  font-size: 14px;
+}
+
+.queue-title-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ytm-text-primary);
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-count-pill {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ytm-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.queue-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--ytm-text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: var(--transition-fast);
+}
+
+.queue-close-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.queue-tracklist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  max-height: 200px;
+  padding-right: 4px;
+}
+
+.queue-tracklist::-webkit-scrollbar {
+  width: 5px;
+}
+
+.queue-tracklist::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.queue-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.queue-item.active {
+  background: rgba(255, 0, 51, 0.14);
+  border-color: rgba(255, 0, 51, 0.35);
+  box-shadow: 0 0 12px rgba(255, 0, 51, 0.2);
+}
+
+.queue-item-idx {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ytm-text-secondary);
+  min-width: 18px;
+  text-align: center;
+}
+
+.queue-item.active .queue-item-idx {
+  color: #ff3355;
+}
+
+.queue-item-thumb {
+  width: 38px;
+  height: 26px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: #111;
+  flex-shrink: 0;
+}
+
+.queue-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-item-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ytm-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-item.active .queue-item-title {
+  color: #ff4d6d;
+  font-weight: 700;
+}
+
+.queue-item-duration {
+  font-size: 11px;
+  color: var(--ytm-text-secondary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* Equalizer mini wave on active track */
+.queue-playing-wave {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  margin-right: 4px;
+}
+
+.queue-playing-wave span {
+  width: 2px;
+  background: #ff3355;
+  border-radius: 1px;
+  animation: waveBar 0.8s ease infinite alternate;
+}
+
+.queue-playing-wave span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.queue-playing-wave span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes waveBar {
+  0% { height: 3px; }
+  100% { height: 12px; }
+}
+
 .ytm-icon-btn {
   background: transparent;
   border: none;

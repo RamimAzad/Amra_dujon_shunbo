@@ -33,6 +33,15 @@
   const audio = document.getElementById('audioPlayer');
   const playBtn = document.getElementById('playBtn');
   const playIconSvg = document.getElementById('playIconSvg');
+  const prevTrackBtn = document.getElementById('prevTrackBtn');
+  const nextTrackBtn = document.getElementById('nextTrackBtn');
+  const queueToggleBtn = document.getElementById('queueToggleBtn');
+  const queueBadge = document.getElementById('queueBadge');
+  const queueShelf = document.getElementById('queueShelf');
+  const queueCloseBtn = document.getElementById('queueCloseBtn');
+  const queueTitleText = document.getElementById('queueTitleText');
+  const queueCountPill = document.getElementById('queueCountPill');
+  const queueTracklist = document.getElementById('queueTracklist');
   const syncBtn = document.getElementById('syncBtn');
   const timelineSlider = document.getElementById('timelineSlider');
   const currentTimeLabel = document.getElementById('currentTimeLabel');
@@ -53,12 +62,16 @@
 
   const tabUploadBtn = document.getElementById('tabUploadBtn');
   const tabYtBtn = document.getElementById('tabYtBtn');
+  const tabYtPlaylistBtn = document.getElementById('tabYtPlaylistBtn');
   const uploadTabContent = document.getElementById('uploadTabContent');
   const ytTabContent = document.getElementById('ytTabContent');
+  const ytPlaylistTabContent = document.getElementById('ytPlaylistTabContent');
   const dropZone = document.getElementById('dropZone');
   const fileInput = document.getElementById('fileInput');
   const ytForm = document.getElementById('ytForm');
   const ytUrlInput = document.getElementById('ytUrlInput');
+  const ytPlaylistForm = document.getElementById('ytPlaylistForm');
+  const ytPlaylistUrlInput = document.getElementById('ytPlaylistUrlInput');
   const statusPill = document.getElementById('statusPill');
   const statusMessage = document.getElementById('statusMessage');
 
@@ -519,20 +532,36 @@
     joinForm.style.display = 'none';
   });
 
-  // Media Tab switching (Upload / YouTube)
-  tabUploadBtn.addEventListener('click', () => {
-    tabUploadBtn.classList.add('active');
-    tabYtBtn.classList.remove('active');
-    uploadTabContent.style.display = 'block';
-    ytTabContent.style.display = 'none';
-  });
+  // Media Tab switching (Upload / YouTube / YouTube Playlist)
+  function switchMediaTab(tab) {
+    tabUploadBtn.classList.toggle('active', tab === 'upload');
+    tabYtBtn.classList.toggle('active', tab === 'yt');
+    tabYtPlaylistBtn.classList.toggle('active', tab === 'playlist');
 
-  tabYtBtn.addEventListener('click', () => {
-    tabYtBtn.classList.add('active');
-    tabUploadBtn.classList.remove('active');
-    ytTabContent.style.display = 'block';
-    uploadTabContent.style.display = 'none';
-  });
+    uploadTabContent.style.display = tab === 'upload' ? 'block' : 'none';
+    ytTabContent.style.display = tab === 'yt' ? 'block' : 'none';
+    ytPlaylistTabContent.style.display = tab === 'playlist' ? 'block' : 'none';
+  }
+
+  tabUploadBtn.addEventListener('click', () => switchMediaTab('upload'));
+  tabYtBtn.addEventListener('click', () => switchMediaTab('yt'));
+  tabYtPlaylistBtn.addEventListener('click', () => switchMediaTab('playlist'));
+
+  // Queue drawer visibility toggle
+  function toggleQueue(forceOpen) {
+    if (typeof forceOpen === 'boolean') {
+      queueShelf.style.display = forceOpen ? 'flex' : 'none';
+    } else {
+      queueShelf.style.display = queueShelf.style.display === 'none' ? 'flex' : 'none';
+    }
+  }
+
+  if (queueToggleBtn) {
+    queueToggleBtn.addEventListener('click', () => toggleQueue());
+  }
+  if (queueCloseBtn) {
+    queueCloseBtn.addEventListener('click', () => toggleQueue(false));
+  }
 
   // Parse path for /room/:id or ?room=...
   function checkUrlForRoom() {
@@ -682,11 +711,83 @@
     }
   }
 
+  // Render Queue Drawer
+  function renderQueue(queue, currentIndex, playlistTitle) {
+    if (!queueTracklist) return;
+
+    const trackCount = queue ? queue.length : 0;
+    if (trackCount === 0) {
+      if (queueBadge) queueBadge.style.display = 'none';
+      if (prevTrackBtn) prevTrackBtn.disabled = true;
+      if (nextTrackBtn) nextTrackBtn.disabled = true;
+      queueTracklist.innerHTML = '<div style="padding: 12px; color: var(--ytm-text-secondary); font-size: 12px; text-align: center;">No tracks in queue.</div>';
+      return;
+    }
+
+    if (queueBadge) {
+      queueBadge.textContent = trackCount;
+      queueBadge.style.display = trackCount > 1 ? 'inline-block' : 'none';
+    }
+    if (prevTrackBtn) prevTrackBtn.disabled = trackCount <= 1;
+    if (nextTrackBtn) nextTrackBtn.disabled = trackCount <= 1;
+
+    if (queueTitleText) {
+      queueTitleText.textContent = playlistTitle || (trackCount > 1 ? 'Playlist Queue' : 'Current Track');
+    }
+    if (queueCountPill) {
+      queueCountPill.textContent = `${trackCount} track${trackCount === 1 ? '' : 's'}`;
+    }
+
+    queueTracklist.innerHTML = '';
+    queue.forEach((track, i) => {
+      const item = document.createElement('div');
+      const isActive = i === currentIndex;
+      item.className = `queue-item ${isActive ? 'active' : ''}`;
+
+      const thumbUrl = track.source === 'youtube'
+        ? `https://img.youtube.com/vi/${track.id}/default.jpg`
+        : '';
+
+      const thumbHtml = thumbUrl
+        ? `<img class="queue-item-thumb" src="${thumbUrl}" alt="art" onerror="this.style.display='none'">`
+        : `<div class="queue-item-thumb" style="display:flex;align-items:center;justify-content:center;font-size:13px;color:#aaa;">📁</div>`;
+
+      const waveHtml = isActive && musicalState.isPlaying
+        ? `<div class="queue-playing-wave"><span></span><span></span><span></span></div>`
+        : '';
+
+      const durText = track.duration_seconds ? formatTime(track.duration_seconds) : '';
+
+      item.innerHTML = `
+        <span class="queue-item-idx">${isActive ? '▶' : (i + 1)}</span>
+        ${thumbHtml}
+        <div class="queue-item-info">
+          <div class="queue-item-title">${waveHtml}${escapeHtml(track.title)}</div>
+        </div>
+        ${durText ? `<span class="queue-item-duration">${durText}</span>` : ''}
+      `;
+
+      item.addEventListener('click', () => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'SELECT_TRACK',
+            payload: { index: i }
+          }));
+        }
+      });
+
+      queueTracklist.appendChild(item);
+    });
+  }
+
   // Apply synchronized room state
   function applySyncState(state) {
     if (!state) return;
 
     listenerCount.textContent = state.listeners_count || 1;
+
+    // Render Synchronized Queue
+    renderQueue(state.queue || [], state.current_track_index || 0, state.playlist_title);
 
     // Track metadata & Artwork
     if (state.current_track) {
@@ -727,6 +828,7 @@
       albumArtPlaceholder.style.display = 'flex';
       updatePlayButtonIcon(false);
       vinylDisc.classList.remove('spinning');
+      renderQueue([], 0, null);
       return;
     }
 
@@ -808,6 +910,32 @@
         type: 'PAUSE',
         payload: { position: audio.currentTime }
       }));
+    }
+  });
+
+  // Track navigation (Previous / Next)
+  if (prevTrackBtn) {
+    prevTrackBtn.addEventListener('click', () => {
+      initVisualizer();
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'PREV_TRACK', payload: null }));
+      }
+    });
+  }
+
+  if (nextTrackBtn) {
+    nextTrackBtn.addEventListener('click', () => {
+      initVisualizer();
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'NEXT_TRACK', payload: null }));
+      }
+    });
+  }
+
+  // Auto-play next track when current finishes
+  audio.addEventListener('ended', () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'NEXT_TRACK', payload: null }));
     }
   });
 
@@ -983,6 +1111,40 @@
       showToast('YouTube extraction failed: ' + err.message, '❌');
     }
   });
+
+  // YouTube Playlist Ingestion
+  if (ytPlaylistForm) {
+    ytPlaylistForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = ytPlaylistUrlInput.value.trim();
+      if (!url || !currentRoomId) return;
+
+      setStatus('Extracting YouTube playlist & preparing first track...', true);
+      ytPlaylistUrlInput.value = '';
+
+      try {
+        const res = await fetch(`/api/rooms/${currentRoomId}/youtube-playlist`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(errText);
+        }
+
+        const data = await res.json();
+        setStatus('', false);
+        showToast(`Loaded playlist: "${data.playlist_title}" (${data.total_tracks} tracks)`, '📑');
+        toggleQueue(true); // Open the queue drawer to show all tracks
+        initVisualizer();
+      } catch (err) {
+        setStatus('', false);
+        showToast('Playlist failed: ' + err.message, '❌');
+      }
+    });
+  }
 
   // YouTube Live Chat Avatars & Rendering
   const AVATAR_COLORS = [

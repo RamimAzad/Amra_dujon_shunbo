@@ -23,6 +23,9 @@ pub struct Room {
     pub listeners: HashMap<String, String>, // session_id -> nickname
     pub messages: Vec<ChatMessage>,
     pub tx: broadcast::Sender<ServerMessage>,
+    pub queue: Vec<TrackInfo>,
+    pub current_track_index: usize,
+    pub playlist_title: Option<String>,
 }
 
 impl Room {
@@ -38,6 +41,9 @@ impl Room {
             listeners: HashMap::new(),
             messages: Vec::new(),
             tx,
+            queue: Vec::new(),
+            current_track_index: 0,
+            playlist_title: None,
         }
     }
 
@@ -67,6 +73,9 @@ impl Room {
             server_time_ms: current_time_ms(),
             listeners_count: self.listeners.len(),
             listeners: self.listeners.values().cloned().collect(),
+            queue: self.queue.clone(),
+            current_track_index: self.current_track_index,
+            playlist_title: self.playlist_title.clone(),
         }
     }
 
@@ -88,10 +97,61 @@ impl Room {
     }
 
     pub fn set_track(&mut self, track: TrackInfo) {
+        self.queue = vec![track.clone()];
+        self.current_track_index = 0;
+        self.playlist_title = None;
         self.current_track = Some(track);
         self.position = 0.0;
         self.is_playing = true;
         self.last_updated_at_ms = current_time_ms();
+    }
+
+    pub fn set_playlist(&mut self, title: String, queue: Vec<TrackInfo>, active_index: usize) {
+        if !queue.is_empty() {
+            let idx = active_index.min(queue.len() - 1);
+            self.current_track = Some(queue[idx].clone());
+            self.current_track_index = idx;
+        }
+        self.queue = queue;
+        self.playlist_title = Some(title);
+        self.position = 0.0;
+        self.is_playing = true;
+        self.last_updated_at_ms = current_time_ms();
+    }
+
+    pub fn select_track_index(&mut self, index: usize) -> Option<TrackInfo> {
+        if index < self.queue.len() {
+            self.current_track_index = index;
+            let track = self.queue[index].clone();
+            self.current_track = Some(track.clone());
+            self.position = 0.0;
+            self.is_playing = true;
+            self.last_updated_at_ms = current_time_ms();
+            Some(track)
+        } else {
+            None
+        }
+    }
+
+    pub fn next_track_index(&self) -> Option<usize> {
+        if self.queue.is_empty() {
+            None
+        } else {
+            Some((self.current_track_index + 1) % self.queue.len())
+        }
+    }
+
+    pub fn prev_track_index(&self) -> Option<usize> {
+        if self.queue.is_empty() {
+            None
+        } else {
+            let prev_idx = if self.current_track_index == 0 {
+                self.queue.len() - 1
+            } else {
+                self.current_track_index - 1
+            };
+            Some(prev_idx)
+        }
     }
 
     pub fn add_message(&mut self, sender: String, content: String, is_system: bool) -> ChatMessage {
