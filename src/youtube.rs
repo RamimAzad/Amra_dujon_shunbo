@@ -6,21 +6,31 @@ use tokio::process::Command;
 
 use crate::models::{TrackInfo, TrackSource};
 
-pub fn find_binary(name: &str) -> String {
+pub fn find_binary(name: &str) -> Option<String> {
     let home = std::env::var("HOME").unwrap_or_default();
     let candidates = [
         format!("/opt/homebrew/bin/{}", name),
         format!("/usr/local/bin/{}", name),
         format!("/opt/anaconda3/bin/{}", name),
         format!("{}/.local/bin/{}", home, name),
+        format!("{}/.cargo/bin/{}", home, name),
         format!("/usr/bin/{}", name),
+        format!("/bin/{}", name),
     ];
     for p in &candidates {
         if Path::new(p).exists() {
-            return p.clone();
+            return Some(p.clone());
         }
     }
-    name.to_string()
+    if let Ok(path_var) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+    None
 }
 
 pub fn extract_video_id(url: &str) -> Option<String> {
@@ -33,8 +43,12 @@ pub async fn extract_youtube_audio(
     url: &str,
     upload_dir: &str,
 ) -> Result<TrackInfo> {
-    let ytdlp = find_binary("yt-dlp");
-    let ffmpeg = find_binary("ffmpeg");
+    let ytdlp = find_binary("yt-dlp").ok_or_else(|| {
+        anyhow!("'yt-dlp' executable was not found. Please ensure yt-dlp is installed on the host system.")
+    })?;
+    let ffmpeg = find_binary("ffmpeg").ok_or_else(|| {
+        anyhow!("'ffmpeg' executable was not found. Please ensure ffmpeg is installed on the host system.")
+    })?;
 
     let room_audio_dir = Path::new(upload_dir).join(room_id);
     tokio::fs::create_dir_all(&room_audio_dir).await?;
@@ -74,14 +88,15 @@ pub async fn extract_youtube_audio(
         cmd.arg("--cookies").arg("cookies.txt");
     }
 
-    let node_bin = find_binary("node");
-    if Path::new(&node_bin).exists() {
+    if let Some(node_bin) = find_binary("node") {
         cmd.arg("--js-runtimes").arg(format!("node:{}", node_bin));
     }
 
     cmd.arg(url);
 
-    let output = cmd.output().await?;
+    let output = cmd.output().await.map_err(|e| {
+        anyhow!("Failed to start yt-dlp ('{}'): {}", ytdlp, e)
+    })?;
 
     if !output.status.success() {
         let err_msg = String::from_utf8_lossy(&output.stderr);
