@@ -119,9 +119,6 @@ fn apply_common_args(cmd: &mut Command, cookies_path: Option<&str>) {
         cmd.arg("--extractor-args").arg(custom_args);
     } else if let Ok(client) = std::env::var("YTDLP_PLAYER_CLIENT") {
         cmd.arg("--extractor-args").arg(format!("youtube:player_client={}", client));
-    } else if cookies_path.is_none() {
-        // Fallback clients when unauthenticated
-        cmd.arg("--extractor-args").arg("youtube:player_client=ios,mweb,web");
     }
 
     cmd.arg("--geo-bypass");
@@ -135,6 +132,12 @@ fn format_ytdlp_error(stderr: &str) -> anyhow::Error {
         return anyhow!(
             "YouTube blocked cloud server IP: 'Sign in to confirm you're not a bot'. \
             To fix this on Railway: export your YouTube cookies into a cookies.txt file using a browser extension (like 'Get cookies.txt LOCALLY'), then add a 'YOUTUBE_COOKIES' environment variable in your Railway dashboard with the file contents."
+        );
+    }
+
+    if stderr.contains("Requested format is not available") {
+        return anyhow!(
+            "Requested audio format not available from YouTube. To resolve, ensure YOUTUBE_COOKIES is configured in Railway Variables or leave player client to default."
         );
     }
 
@@ -203,6 +206,7 @@ pub async fn extract_youtube_audio(
     cmd.arg("--ffmpeg-location").arg(&ffmpeg);
     apply_common_args(&mut cmd, cookies_file.as_deref());
     cmd.arg("--no-playlist");
+    cmd.arg("-f").arg("ba/b");
     cmd.arg("--print-json");
     cmd.arg("-x");
     cmd.arg("--audio-format").arg("mp3");
