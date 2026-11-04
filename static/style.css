@@ -28,6 +28,20 @@
   --ytm-font: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Oxygen, Ubuntu, Cantarell, sans-serif;
   --transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --glass-blur: blur(20px) saturate(160%);
+
+  /* Dynamic Beat-Dancing Custom Properties (Driven in real-time by Audio Context) */
+  --beat-kick: 0;
+  --beat-snare: 0;
+  --beat-hihat: 0;
+  --beat-flux: 0;
+  --beat-bass: 0;
+  --beat-mids: 0;
+  --beat-treble: 0;
+  --beat-sway: 0;
+  --beat-bob: 0;
+  --beat-tilt: 0;
+  --theme-color: #00ffff;
+  --theme-rgb: 0, 255, 255;
 }
 
 * {
@@ -67,8 +81,10 @@ body {
   overflow: hidden;
   pointer-events: none;
   z-index: 0;
-  transform: translate3d(var(--tilt-x, 0px), var(--tilt-y, 0px), 0);
-  transition: transform 0.12s linear;
+  transform: translate3d(calc(var(--tilt-x, 0px) + var(--beat-sway, 0) * 5px), calc(var(--tilt-y, 0px) + var(--beat-bob, 0) * -1.8px), 0) scale(calc(1 + var(--beat-kick, 0) * 0.05 + var(--beat-bass, 0) * 0.03 + var(--beat-flux, 0) * 0.025));
+  filter: brightness(calc(1 + var(--beat-kick, 0) * 0.45 + var(--beat-bass, 0) * 0.25 + var(--beat-snare, 0) * 0.2));
+  transition: transform 0.04s ease, filter 0.04s ease;
+  will-change: transform, filter;
 }
 
 .ambient-orb {
@@ -444,38 +460,144 @@ body {
   gap: 10px;
 }
 
-/* Album Showcase & Radial Visualizer */
+/* Album Showcase & Yue Visualizer Stage (Dancing to the Beat) */
 .album-showcase {
   position: relative;
   width: 100%;
   height: clamp(420px, 50vh, 480px);
-  background: radial-gradient(circle at center, rgba(38, 18, 44, 0.55) 0%, rgba(15, 23, 42, 0.7) 55%, rgba(11, 15, 25, 0.9) 100%);
+  background: radial-gradient(ellipse at 50% 50%, #12121c 0%, #0a0a0f 65%, #050508 100%);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(var(--theme-rgb, 0, 255, 255), calc(0.12 + var(--beat-kick, 0) * 0.45 + var(--beat-snare, 0) * 0.25 + var(--beat-flux, 0) * 0.2));
   border-radius: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 50px rgba(99, 102, 241, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9),
+              0 0 calc(20px + var(--beat-kick, 0) * 55px + var(--beat-snare, 0) * 30px + var(--beat-flux, 0) * 25px) rgba(var(--theme-rgb, 0, 255, 255), calc(0.1 + var(--beat-kick, 0) * 0.38 + var(--beat-snare, 0) * 0.2)),
+              inset 0 0 calc(15px + var(--beat-bass, 0) * 35px + var(--beat-kick, 0) * 20px) rgba(var(--theme-rgb, 0, 255, 255), calc(0.05 + var(--beat-kick, 0) * 0.22));
+  transform: translate3d(calc(var(--beat-sway, 0) * 2.5px), calc(var(--beat-bob, 0) * -0.7px), 0)
+             scale(calc(1 + var(--beat-kick, 0) * 0.028 + var(--beat-flux, 0) * 0.016))
+             rotate(calc(var(--beat-tilt, 0) * 0.25deg));
+  transform-origin: center center;
+  transition: transform 0.035s cubic-bezier(0.1, 0.9, 0.2, 1), box-shadow 0.04s ease, border-color 0.04s ease;
+  will-change: transform, box-shadow, border-color;
 }
 
-.album-artwork-box {
-  position: relative;
-  width: clamp(170px, 22vh, 205px);
-  height: clamp(170px, 22vh, 205px);
+/* Yue Header UI: Track Title Indicator (Matches SnowballSH/yue Top-Left) */
+.yue-track-indicator {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(10, 10, 16, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(var(--theme-rgb, 0, 255, 255), calc(0.14 + var(--beat-kick, 0) * 0.4 + var(--beat-flux, 0) * 0.25));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5),
+              0 0 calc(8px + var(--beat-kick, 0) * 20px + var(--beat-snare, 0) * 12px) rgba(var(--theme-rgb, 0, 255, 255), calc(0.12 + var(--beat-kick, 0) * 0.35));
+  pointer-events: none;
+  user-select: none;
+  transform: translate3d(calc(var(--beat-sway, 0) * 1.5px), calc(var(--beat-bob, 0) * -0.4px), 0)
+             scale(calc(1 + var(--beat-kick, 0) * 0.022 + var(--beat-snare, 0) * 0.015));
+  transition: transform 0.04s cubic-bezier(0.1, 0.9, 0.2, 1), box-shadow 0.05s ease;
+}
+
+.yue-track-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--theme-color, #00ffff);
+  box-shadow: 0 0 calc(8px + var(--beat-kick, 0) * 22px + var(--beat-flux, 0) * 14px) var(--theme-color, #00ffff) !important;
+  transform: scale(calc(1 + var(--beat-kick, 0) * 0.45 + var(--beat-flux, 0) * 0.3));
+  transition: background 0.3s ease, transform 0.04s ease;
+  flex-shrink: 0;
+}
+
+.yue-track-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: -0.1px;
+  white-space: nowrap;
+  max-width: clamp(160px, 28vw, 340px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Yue Header UI: Theme Controller (Matches SnowballSH/yue Cycle Theme Button) */
+.yue-controls {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.yue-theme-btn {
+  background: rgba(18, 18, 26, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(var(--theme-rgb, 0, 255, 255), calc(0.18 + var(--beat-kick, 0) * 0.4 + var(--beat-snare, 0) * 0.2));
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4),
+              0 0 calc(6px + var(--beat-kick, 0) * 18px + var(--beat-flux, 0) * 10px) rgba(var(--theme-rgb, 0, 255, 255), calc(0.1 + var(--beat-kick, 0) * 0.3));
+  transform: translate3d(calc(var(--beat-sway, 0) * -1.2px), calc(var(--beat-bob, 0) * -0.3px), 0)
+             scale(calc(1 + var(--beat-kick, 0) * 0.02 + var(--beat-flux, 0) * 0.015));
+  transition: all 0.05s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.yue-theme-btn:hover {
+  background: rgba(28, 28, 42, 0.9);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+}
+
+.yue-theme-btn:active {
+  transform: translateY(1px);
+}
+
+.yue-theme-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--theme-color, #00ffff);
+  box-shadow: 0 0 calc(8px + var(--beat-kick, 0) * 22px + var(--beat-hihat, 0) * 12px) var(--theme-color, #00ffff) !important;
+  transform: scale(calc(1 + var(--beat-kick, 0) * 0.4 + var(--beat-hihat, 0) * 0.25));
+  transition: background 0.3s ease, transform 0.04s ease;
+  flex-shrink: 0;
+}
+  position: absolute;
+  width: clamp(120px, 16vh, 150px);
+  height: clamp(120px, 16vh, 150px);
   border-radius: 50%;
   overflow: hidden;
-  box-shadow: 0 0 35px rgba(0, 0, 0, 0.95);
-  z-index: 2;
+  box-shadow: 0 0 35px rgba(255, 235, 0, 0.35), 0 0 15px rgba(0, 0, 0, 0.9);
+  z-index: 3;
   background: #111111;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: transform 0.08s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.1s ease;
   will-change: transform, box-shadow;
-  border: 3px solid rgba(255, 255, 255, 0.14);
+  border: 3px solid rgba(255, 235, 0, 0.8);
 }
 
 .album-art-image {
@@ -563,6 +685,9 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 0 calc(var(--beat-kick, 0) * 14px + var(--beat-flux, 0) * 8px) rgba(var(--theme-rgb, 0, 255, 255), calc(var(--beat-kick, 0) * 0.45 + var(--beat-flux, 0) * 0.3));
+  transform: translate3d(calc(var(--beat-sway, 0) * 1.2px), 0, 0);
+  transition: transform 0.04s ease, text-shadow 0.04s ease;
 }
 
 .track-sub-details {
@@ -630,16 +755,19 @@ body {
 .ytm-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
-  background: var(--ytm-red);
+  background: #ffffff;
+  border: 2px solid var(--theme-color, var(--ytm-red));
+  box-shadow: 0 0 calc(6px + var(--beat-kick, 0) * 20px + var(--beat-flux, 0) * 10px) var(--theme-color, #00ffff);
   cursor: pointer;
-  transition: transform 0.1s ease;
+  transform: scale(calc(1 + var(--beat-kick, 0) * 0.45 + var(--beat-flux, 0) * 0.25));
+  transition: transform 0.04s ease, box-shadow 0.04s ease;
 }
 
 .timeline-bar-wrapper:hover .ytm-slider::-webkit-slider-thumb {
-  transform: scale(1.2);
+  transform: scale(calc(1.3 + var(--beat-kick, 0) * 0.45 + var(--beat-flux, 0) * 0.25));
 }
 
 .ytm-time-labels {
@@ -658,6 +786,9 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 2px 0;
+  transform: translate3d(calc(var(--beat-sway, 0) * 1.2px), calc(var(--beat-bob, 0) * -0.3px), 0)
+             scale(calc(1 + var(--beat-kick, 0) * 0.012 + var(--beat-snare, 0) * 0.008));
+  transition: transform 0.04s ease;
 }
 
 .controls-left {
@@ -679,7 +810,8 @@ body {
   color: var(--ytm-text-primary);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform: scale(calc(1 + var(--beat-hihat, 0) * 0.12 + var(--beat-kick, 0) * 0.06));
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.04s ease;
 }
 
 .track-nav-btn:hover {
@@ -834,9 +966,11 @@ body {
 }
 
 .queue-item.active {
-  background: rgba(255, 0, 51, 0.14);
-  border-color: rgba(255, 0, 51, 0.35);
-  box-shadow: 0 0 12px rgba(255, 0, 51, 0.2);
+  background: rgba(var(--theme-rgb, 0, 255, 255), calc(0.1 + var(--beat-kick, 0) * 0.12));
+  border-color: rgba(var(--theme-rgb, 0, 255, 255), calc(0.35 + var(--beat-kick, 0) * 0.5 + var(--beat-flux, 0) * 0.25));
+  box-shadow: 0 0 calc(10px + var(--beat-kick, 0) * 24px + var(--beat-flux, 0) * 14px) rgba(var(--theme-rgb, 0, 255, 255), calc(0.14 + var(--beat-kick, 0) * 0.35));
+  transform: translate3d(calc(var(--beat-sway, 0) * 1px), 0, 0) scale(calc(1 + var(--beat-kick, 0) * 0.02 + var(--beat-flux, 0) * 0.012));
+  transition: transform 0.04s ease, box-shadow 0.04s ease, border-color 0.04s ease;
 }
 
 .queue-item-idx {
@@ -848,7 +982,7 @@ body {
 }
 
 .queue-item.active .queue-item-idx {
-  color: #ff3355;
+  color: var(--theme-color, #00ffff);
 }
 
 .queue-item-thumb {
@@ -875,8 +1009,9 @@ body {
 }
 
 .queue-item.active .queue-item-title {
-  color: #ff4d6d;
+  color: #ffffff;
   font-weight: 700;
+  text-shadow: 0 0 calc(4px + var(--beat-kick, 0) * 8px) rgba(var(--theme-rgb, 0, 255, 255), 0.6);
 }
 
 .queue-item-duration {
@@ -886,33 +1021,37 @@ body {
   flex-shrink: 0;
 }
 
-/* Equalizer mini wave on active track */
+/* Equalizer mini wave on active track (Dancing in real-time to Bass, Mids, Treble) */
 .queue-playing-wave {
   display: inline-flex;
   align-items: flex-end;
   gap: 2px;
-  height: 12px;
+  height: 14px;
   margin-right: 4px;
 }
 
 .queue-playing-wave span {
-  width: 2px;
-  background: #ff3355;
+  width: 2.5px;
+  background: var(--theme-color, #00ffff);
   border-radius: 1px;
-  animation: waveBar 0.8s ease infinite alternate;
+  min-height: 2px;
+  box-shadow: 0 0 6px var(--theme-color, #00ffff);
+  transition: height 0.04s ease;
+}
+
+.queue-playing-wave span:nth-child(1) {
+  height: calc(15% + var(--beat-bass, 0) * 65% + var(--beat-kick, 0) * 20%) !important;
+  animation: none;
 }
 
 .queue-playing-wave span:nth-child(2) {
-  animation-delay: 0.2s;
+  height: calc(15% + var(--beat-mids, 0) * 55% + var(--beat-snare, 0) * 30%) !important;
+  animation: none;
 }
 
 .queue-playing-wave span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes waveBar {
-  0% { height: 3px; }
-  100% { height: 12px; }
+  height: calc(15% + var(--beat-treble, 0) * 55% + var(--beat-hihat, 0) * 30%) !important;
+  animation: none;
 }
 
 .ytm-icon-btn {
@@ -933,24 +1072,28 @@ body {
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* YouTube Iconic White Play Button */
+/* YouTube Iconic White Play Button with Beat Dancing Reaction */
 .ytm-play-btn {
   width: 48px;
   height: 48px;
   border-radius: 50%;
   background: #ffffff;
   color: #000000;
-  border: none;
+  border: 2px solid rgba(var(--theme-rgb, 0, 255, 255), calc(0.3 + var(--beat-kick, 0) * 0.7 + var(--beat-snare, 0) * 0.4));
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-  transition: var(--transition-fast);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6),
+              0 0 calc(12px + var(--beat-kick, 0) * 36px + var(--beat-snare, 0) * 20px) rgba(var(--theme-rgb, 0, 255, 255), calc(0.25 + var(--beat-kick, 0) * 0.7 + var(--beat-snare, 0) * 0.35));
+  transform: translate3d(0, calc(var(--beat-bob, 0) * -0.6px), 0)
+             scale(calc(1 + var(--beat-kick, 0) * 0.12 + var(--beat-flux, 0) * 0.06));
+  transition: transform 0.035s cubic-bezier(0.1, 0.9, 0.2, 1), box-shadow 0.04s ease;
+  will-change: transform, box-shadow;
 }
 
 .ytm-play-btn:hover {
-  transform: scale(1.06);
+  transform: translate3d(0, calc(var(--beat-bob, 0) * -0.6px), 0) scale(calc(1.06 + var(--beat-kick, 0) * 0.12 + var(--beat-flux, 0) * 0.06));
   background: #f0f0f0;
 }
 
@@ -1363,4 +1506,28 @@ body {
 @keyframes toastIn {
   from { transform: translateY(16px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+
+@media (max-width: 680px) {
+  .album-showcase {
+    height: clamp(340px, 44vh, 400px);
+  }
+  .yue-track-indicator {
+    top: 14px;
+    left: 14px;
+    padding: 4px 10px;
+    gap: 6px;
+  }
+  .yue-track-title {
+    max-width: 140px;
+    font-size: 11px;
+  }
+  .yue-controls {
+    top: 14px;
+    right: 14px;
+  }
+  .yue-theme-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
 }

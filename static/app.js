@@ -110,23 +110,386 @@
     }, 3000);
   }
 
-  // 360° Circular Radial Visualizer Engine with Staged Beat Dancing & Peak-Hold
-  const RADIAL_BAR_COUNT = 96;
-  let radialHeights = new Float32Array(RADIAL_BAR_COUNT);
-  let radialPeaks = new Float32Array(RADIAL_BAR_COUNT);
-  let radialPeakSpeeds = new Float32Array(RADIAL_BAR_COUNT);
-  let radialPeakHolds = new Int16Array(RADIAL_BAR_COUNT);
-  let smoothBassEnergy = 0;
-  let smoothMidEnergy = 0;
-  let smoothTrebleEnergy = 0;
-  let lastBassRaw = 0;
-  let lastBeatKickTime = 0;
-  let shockwaveRadius = 0;
-  let shockwaveAlpha = 0;
-  let flowPhase = 0;
-  let rhythmicSwell = 0;
-  let smoothStageMult = 0.72;
+  // ========================================================
+  // SNOWBALLSH/YUE AUDIO VISUALIZER ENGINE
+  // Faithful 1:1 port of SnowballSH/yue (NCS-style Rust visualizer)
+  // Matching core_ring.rs, spectrum.rs, fft.rs, and main.rs
+  // ========================================================
+
+  // Constants from SnowballSH/yue core_ring.rs & spectrum.rs
+  const BASE_RADIUS_RATIO = 0.19;
+  const MAX_BASS_PULSE_RATIO = 0.28;
+  const GLOW_THICKNESS_RATIO = 0.12;
+  const EDGE_THICKNESS_RATIO = 0.12;
+  const FLOAT_AMPLITUDE_RATIO = 0.045;
+  const FLOAT_BASS_BOOST_RATIO = 0.03;
+  const FLOAT_SPEED_BASE = 0.3;
+  const FLOAT_SPEED_BASS_SCALE = 0.08;
+
+  const NUM_POINTS = 120;
+  const MAX_BAR_HEIGHT = 180.0;
+  const BASE_RING_RADIUS = 720.0 * 0.19; // 136.8
+  const SPECTRUM_RADIUS_OFFSET_RATIO = 0.075;
+
+  // The 6 official themes from SnowballSH/yue main.rs
+  const YUE_THEMES = [
+    { name: 'Cyan', r: 0, g: 255, b: 255, hex: '#00FFFF' },
+    { name: 'Magenta', r: 255, g: 0, b: 255, hex: '#FF00FF' },
+    { name: 'Yellow', r: 255, g: 255, b: 0, hex: '#FFFF00' },
+    { name: 'Lime', r: 50, g: 255, b: 50, hex: '#32FF32' },
+    { name: 'Pinkish Red', r: 255, g: 100, b: 100, hex: '#FF6464' },
+    { name: 'White', r: 255, g: 255, b: 255, hex: '#FFFFFF' }
+  ];
+  let currentThemeIdx = 0;
+
+  // Yue Top Header UI Elements
+  const yueCycleThemeBtn = document.getElementById('yueCycleThemeBtn');
+  const yueThemeSwatch = document.getElementById('yueThemeSwatch');
+  const yueThemeLabel = document.getElementById('yueThemeLabel');
+  const yueTrackDot = document.getElementById('yueTrackDot');
+  const yueTrackName = document.getElementById('yueTrackName');
+
+  function applyYueTheme(idx) {
+    currentThemeIdx = (idx + YUE_THEMES.length) % YUE_THEMES.length;
+    const theme = YUE_THEMES[currentThemeIdx];
+    if (yueThemeSwatch) {
+      yueThemeSwatch.style.background = theme.hex;
+      yueThemeSwatch.style.boxShadow = `0 0 10px ${theme.hex}`;
+    }
+    if (yueTrackDot) {
+      yueTrackDot.style.background = theme.hex;
+      yueTrackDot.style.boxShadow = `0 0 10px ${theme.hex}`;
+    }
+    if (yueThemeLabel) {
+      yueThemeLabel.textContent = `Theme: ${theme.name}`;
+    }
+  }
+
+  if (yueCycleThemeBtn) {
+    yueCycleThemeBtn.addEventListener('click', () => {
+      applyYueTheme(currentThemeIdx + 1);
+    });
+  }
+  applyYueTheme(0);
+
+  // CoreRing Engine (exact math from core_ring.rs)
+  class YueCoreRing {
+    constructor() {
+      this.baseRadius = 720.0 * BASE_RADIUS_RATIO;
+      this.radius = this.baseRadius;
+      this.offset = { x: 0, y: 0 };
+      this.smoothedBass = 0;
+      this.kickPulse = 0;
+      this.time = 0;
+    }
+
+    update(dt, spectrum, screenW, screenH, externalKick = 0, bassEnergy = 0, fluxEnergy = 0, rhythmicPhase = 0) {
+      this.time += dt;
+      this.baseRadius = Math.min(screenW, screenH) * BASE_RADIUS_RATIO;
+      const maxBassPulse = this.baseRadius * MAX_BASS_PULSE_RATIO;
+
+      // Extract bass (low frequencies). Focus on punchy kick band (bins 1-6)
+      const bassBins = Math.min(6, spectrum.length);
+      let bass = 0;
+      if (bassBins > 1) {
+        let sum = 0;
+        for (let i = 1; i < bassBins; i++) sum += spectrum[i];
+        bass = sum / (bassBins - 1);
+      }
+
+      // Smooth the bass reaction for general floating (faster reaction for snappy dancing)
+      const bassInput = bass * 12.0;
+      this.smoothedBass = this.smoothedBass * 0.88 + bassInput * 0.12;
+
+      // Kick detection: If bass spikes suddenly above smoothed average or external kick impulse hits
+      let kickAmount = 0.0;
+      if (bassInput > this.smoothedBass + 0.75 || externalKick > 0.08) {
+        const rawDelta = Math.max(bassInput - this.smoothedBass, externalKick * 2.2);
+        kickAmount = rawDelta * this.baseRadius * 0.055;
+      }
+      this.kickPulse = Math.min(maxBassPulse, this.kickPulse + kickAmount);
+      // Snappy spring recoil (0.80) makes it bounce energetically
+      this.kickPulse *= 0.80;
+
+      // The exact radius is base + general floating + sharp kick + transient flux boost
+      this.radius = this.baseRadius + Math.min(this.smoothedBass * 1.5, this.baseRadius * 0.16) + this.kickPulse * 1.35 + (fluxEnergy || 0) * (this.baseRadius * 0.08);
+
+      // Organic floating offset with groove sway & bounce
+      const floatAmplitude = this.baseRadius * FLOAT_AMPLITUDE_RATIO + Math.min(this.smoothedBass, this.baseRadius * 0.12) * FLOAT_BASS_BOOST_RATIO;
+      const floatSpeed = FLOAT_SPEED_BASE + Math.min(this.smoothedBass, 3.0) * FLOAT_SPEED_BASS_SCALE;
+
+      const grooveSway = Math.sin(rhythmicPhase || (this.time * 2.2)) * (this.baseRadius * 0.025 + externalKick * 6.0);
+      const grooveBob = -Math.abs(Math.sin((rhythmicPhase || (this.time * 2.2)) * 1.5)) * (this.baseRadius * 0.025 + externalKick * 8.0);
+
+      this.offset.x = Math.sin(this.time * 0.7 * floatSpeed) * floatAmplitude + Math.cos(this.time * 1.3 * floatSpeed) * (floatAmplitude * 0.5) + grooveSway;
+      this.offset.y = Math.cos(this.time * 0.9 * floatSpeed) * floatAmplitude + Math.sin(this.time * 1.1 * floatSpeed) * (floatAmplitude * 0.5) + grooveBob;
+    }
+
+    draw(ctx, center, theme, logoImg, drawScale, kickBoost = 0, fluxBoost = 0, rhythmicPhase = 0) {
+      const radius = this.radius * drawScale;
+      const edgeThickness = Math.max(16.0 * drawScale, this.baseRadius * drawScale * EDGE_THICKNESS_RATIO);
+      const glowThickness = Math.max(18.0 * drawScale, this.baseRadius * drawScale * GLOW_THICKNESS_RATIO);
+
+      // 1. Draw outer pulsing glow (core_ring.rs: glow_color.a = 50 translucent glow + kick boost + flux boost)
+      const glowInner = radius - edgeThickness * 0.2;
+      const glowOuter = radius + glowThickness * (1.0 + kickBoost * 0.45 + (fluxBoost || 0) * 0.25);
+      const glowMid = (glowInner + glowOuter) / 2.0;
+      const glowWidth = Math.max(1, glowOuter - glowInner);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, glowMid, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${theme.r}, ${theme.g}, ${theme.b}, ${(0.20 + kickBoost * 0.32 + (fluxBoost || 0) * 0.18).toFixed(3)})`;
+      ctx.lineWidth = glowWidth;
+      ctx.stroke();
+
+      // 2. Draw the core circle edge smoothly (core_ring.rs)
+      const coreInner = radius - edgeThickness;
+      const coreOuter = radius;
+      const coreMid = (coreInner + coreOuter) / 2.0;
+      const coreWidth = Math.max(1, coreOuter - coreInner);
+
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, coreMid, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${theme.r}, ${theme.g}, ${theme.b}, 1.0)`;
+      ctx.lineWidth = coreWidth;
+      ctx.stroke();
+
+      // 3. Center disc: If logo provided & loaded, fit inside ring with turntable micro-tilt; otherwise solid dark core
+      const fitRadius = Math.max(0, radius - edgeThickness * 1.15);
+      const isImgUsable = Boolean(logoImg && logoImg.complete && logoImg.naturalWidth > 0 && logoImg.getAttribute('src'));
+
+      if (isImgUsable) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, fitRadius, 0, Math.PI * 2);
+        ctx.clip();
+
+        // Dark background behind artwork
+        ctx.fillStyle = '#141414';
+        ctx.fillRect(center.x - fitRadius, center.y - fitRadius, fitRadius * 2, fitRadius * 2);
+
+        // Dynamic turntable micro-rotation and kick scaling on the album artwork
+        const discTilt = Math.sin(rhythmicPhase || 0) * 0.035 * (1.0 + kickBoost * 1.2);
+        const discScale = 1.0 + kickBoost * 0.04 + (fluxBoost || 0) * 0.025;
+
+        ctx.translate(center.x, center.y);
+        ctx.rotate(discTilt);
+        ctx.scale(discScale, discScale);
+
+        // Aspect fit centered
+        const iw = logoImg.naturalWidth;
+        const ih = logoImg.naturalHeight;
+        const scale = (fitRadius * 2.0) / Math.max(iw, ih);
+        const dw = iw * scale;
+        const dh = ih * scale;
+        ctx.drawImage(logoImg, -dw / 2.0, -dh / 2.0, dw, dh);
+        ctx.restore();
+      } else {
+        // Otherwise draw a solid dark center core (Color::new(20, 20, 20, 255) from core_ring.rs)
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, radius - edgeThickness, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgb(20, 20, 20)';
+        ctx.fill();
+
+        // Sleek subtle music glyph in center core that dances with the beat
+        const emblemRad = fitRadius * 0.45;
+        if (emblemRad > 5) {
+          ctx.beginPath();
+          ctx.arc(center.x, center.y, emblemRad * (1.0 + kickBoost * 0.1), 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(${theme.r}, ${theme.g}, ${theme.b}, ${(0.25 + kickBoost * 0.25).toFixed(3)})`;
+          ctx.lineWidth = Math.max(1.5, 2.5 * drawScale);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(center.x, center.y, emblemRad * 0.35 * (1.0 + kickBoost * 0.15), 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${theme.r}, ${theme.g}, ${theme.b}, ${(0.25 + kickBoost * 0.35).toFixed(3)})`;
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  // Spectrum Engine (exact math from spectrum.rs with explosive transient attack and orbital rotation)
+  class YueSpectrum {
+    constructor() {
+      this.points = new Float32Array(NUM_POINTS);
+      this.rotation = 0;
+    }
+
+    update(dt, spectrum, bassEnergy = 0, kickBoost = 0, fluxBoost = 0) {
+      // Dynamic orbital momentum: particles orbit around core ring and speed up on beats & onsets!
+      const rotSpeed = 0.06 + bassEnergy * 0.16 + kickBoost * 0.30 + fluxBoost * 0.15;
+      this.rotation = (this.rotation + rotSpeed * dt) % (Math.PI * 2);
+
+      if (!spectrum || spectrum.length === 0) {
+        for (let i = 0; i < NUM_POINTS; i++) {
+          this.points[i] *= 0.82;
+        }
+        return;
+      }
+
+      // Logarithmic scale, capturing up to bin 300 (spectrum.rs)
+      const maxBin = Math.min(300, spectrum.length);
+      const minFreqLog = Math.log(1.0);
+      const maxFreqLog = Math.log(Math.max(2, maxBin));
+      const logRange = maxFreqLog - minFreqLog;
+
+      for (let i = 0; i < NUM_POINTS; i++) {
+        const ratioStart = i / NUM_POINTS;
+        const ratioEnd = (i + 1) / NUM_POINTS;
+
+        const logStart = minFreqLog + ratioStart * logRange;
+        const logEnd = minFreqLog + ratioEnd * logRange;
+
+        const binStart = Math.floor(Math.exp(logStart));
+        const binEnd = Math.ceil(Math.exp(logEnd));
+
+        const start = Math.max(0, Math.min(spectrum.length - 1, binStart));
+        const end = Math.max(start + 1, Math.min(spectrum.length, binEnd));
+
+        let sum = 0;
+        for (let b = start; b < end; b++) {
+          sum += spectrum[b];
+        }
+        const avg = sum / (end - start);
+
+        // Apply a dynamic EQ curve to boost highs visually (spectrum.rs: 1.0 + (i / 120.0) * 2.0)
+        const eqBoost = 1.0 + (i / NUM_POINTS) * 2.2;
+        // In Web Audio [0..1] range, avg * 270.0 * eqBoost scales cleanly up to MAX_BAR_HEIGHT (180.0)
+        // Add transient flux boost for instant note onsets & melodic changes
+        const fluxHeightBoost = 1.0 + (fluxBoost || 0) * 0.32;
+        const height = avg * 270.0 * eqBoost * fluxHeightBoost;
+        const finalHeight = Math.min(MAX_BAR_HEIGHT, height);
+
+        // Asymmetric Peak Tracking: Instant explosive attack (0.12/0.88) and fluid musical release (0.75/0.25)
+        if (finalHeight > this.points[i]) {
+          this.points[i] = this.points[i] * 0.12 + finalHeight * 0.88;
+        } else {
+          this.points[i] = this.points[i] * 0.75 + finalHeight * 0.25;
+        }
+      }
+
+      // Cross-fade the last few points into the first few points (spectrum.rs blend_width = 15)
+      const blendWidth = 15;
+      for (let i = 0; i < blendWidth; i++) {
+        const startI = i;
+        const endI = NUM_POINTS - 1 - i;
+
+        const startVal = this.points[startI];
+        const endVal = this.points[endI];
+
+        const blendFactor = (blendWidth - i) / blendWidth;
+        const avg = (startVal + endVal) * 0.5;
+
+        this.points[startI] = startVal * (1.0 - blendFactor) + avg * blendFactor;
+        this.points[endI] = endVal * (1.0 - blendFactor) + avg * blendFactor;
+      }
+    }
+
+    draw(ctx, center, coreRadius, theme, drawScale, kickBoost = 0, fluxBoost = 0) {
+      const scale = Math.max(1.0, coreRadius / BASE_RING_RADIUS);
+      const renderCoreRadius = coreRadius * drawScale;
+      const radius = renderCoreRadius + renderCoreRadius * SPECTRUM_RADIUS_OFFSET_RATIO;
+      const heightScale = 1.0 + (scale - 1.0) * 0.7;
+      const angleStep = (2.0 * Math.PI) / NUM_POINTS;
+      const kickScale = 1.0 + (kickBoost || 0) * 0.40 + (fluxBoost || 0) * 0.20;
+
+      ctx.save();
+      for (let i = 0; i < NUM_POINTS; i++) {
+        // Incorporate orbital rotation into each point's angle
+        const angle = i * angleStep - Math.PI / 2.0 + this.rotation;
+        const h = this.points[i];
+        const renderedHeight = h * heightScale;
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
+
+        // Draw filler trail dots below the main peak to make it look dense (up to 6 dots from spectrum.rs)
+        const trailCount = Math.floor(Math.min(6.0, Math.max(0.0, renderedHeight / 15.0)));
+        for (let t = 1; t <= trailCount; t++) {
+          const proportion = t / (trailCount + 1.0);
+          const trailRadius = radius + (renderedHeight * proportion) * drawScale;
+          const tx = center.x + cosA * trailRadius;
+          const ty = center.y + sinA * trailRadius;
+
+          const trailSize = Math.max(0.6, (1.0 + (h / MAX_BAR_HEIGHT) * 1.5) * drawScale * (1.0 + (kickBoost || 0) * 0.25 + (fluxBoost || 0) * 0.15));
+          const trailAlpha = Math.min(1.0, (100 + (h / MAX_BAR_HEIGHT) * 80.0 + (kickBoost || 0) * 40.0 + (fluxBoost || 0) * 25.0) / 255.0).toFixed(3);
+
+          ctx.fillStyle = `rgba(${theme.r}, ${theme.g}, ${theme.b}, ${trailAlpha})`;
+          ctx.beginPath();
+          ctx.arc(tx, ty, trailSize, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Main floating peak particle dot (scales & intensifies with the beat and flux)
+        const pointRadius = radius + renderedHeight * drawScale;
+        const px = center.x + cosA * pointRadius;
+        const py = center.y + sinA * pointRadius;
+
+        const dotSize = Math.max(1.0, (2.0 + (h / MAX_BAR_HEIGHT) * 4.4) * drawScale * kickScale);
+        const peakAlpha = Math.min(1.0, (160 + (h / MAX_BAR_HEIGHT) * 95.0 + (kickBoost || 0) * 55.0 + (fluxBoost || 0) * 35.0) / 255.0).toFixed(3);
+
+        ctx.fillStyle = `rgba(${theme.r}, ${theme.g}, ${theme.b}, ${peakAlpha})`;
+        ctx.beginPath();
+        ctx.arc(px, py, dotSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Combined Visualizer Pipeline (matching visuals/mod.rs)
+  class YueVisualizer {
+    constructor() {
+      this.coreRing = new YueCoreRing();
+      this.spectrum = new YueSpectrum();
+    }
+
+    update(dt, spectrumData, layoutW, layoutH, kickBoost = 0, bassEnergy = 0, fluxEnergy = 0, rhythmicPhase = 0) {
+      this.coreRing.update(dt, spectrumData, layoutW, layoutH, kickBoost, bassEnergy, fluxEnergy, rhythmicPhase);
+      this.spectrum.update(dt, spectrumData, bassEnergy, kickBoost, fluxEnergy);
+    }
+
+    draw(ctx, theme, logoImg, renderW, renderH, layoutW = 1280.0, layoutH = 720.0, kickBoost = 0, fluxBoost = 0, rhythmicPhase = 0) {
+      const drawScale = Math.min(renderW / layoutW, renderH / layoutH);
+      const center = {
+        x: renderW / 2.0 + this.coreRing.offset.x * drawScale,
+        y: renderH / 2.0 + this.coreRing.offset.y * drawScale
+      };
+
+      // Draw background (Color::new(10, 10, 15, 255) from main.rs)
+      ctx.fillStyle = '#0a0a0f';
+      ctx.fillRect(0, 0, renderW, renderH);
+
+      // Draw spectrum first (trails radiate outward from ring)
+      this.spectrum.draw(ctx, center, this.coreRing.radius, theme, drawScale, kickBoost, fluxBoost);
+      // Draw core ring over spectrum base
+      this.coreRing.draw(ctx, center, theme, logoImg, drawScale, kickBoost, fluxBoost, rhythmicPhase);
+    }
+  }
+
+  const yueEngine = new YueVisualizer();
   let lastFrameTime = performance.now();
+
+  // Full-System Beat & Rhythmic Transient Tracking
+  let systemBeatKick = 0;
+  let systemBeatSnare = 0;
+  let systemBeatHihat = 0;
+  let smoothFluxEnergy = 0;
+  let rhythmicPhase = 0;
+
+  let lastBassVal = 0;
+  let lastMidVal = 0;
+  let lastTrebleVal = 0;
+  let bassHistoryAvg = 0;
+  let midHistoryAvg = 0;
+  let trebleHistoryAvg = 0;
+
+  let lastKickTriggerTime = 0;
+  let lastSnareTriggerTime = 0;
+  let lastHihatTriggerTime = 0;
+  let prevSpectrumNormalized = null;
 
   // Global Musical Synchronization State shared across visualizer & ambient engines
   const musicalState = {
@@ -141,6 +504,10 @@
     time: 0
   };
 
+  let smoothBassEnergy = 0;
+  let smoothMidEnergy = 0;
+  let smoothTrebleEnergy = 0;
+
   function initVisualizer() {
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -152,8 +519,8 @@
       try {
         audioSourceNode = audioCtx.createMediaElementSource(audio);
         analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 256; // 128 frequency bins
-        analyser.smoothingTimeConstant = 0.90; // High stability, silky smooth, eliminates jitter
+        analyser.fftSize = 1024; // 512 frequency bins
+        analyser.smoothingTimeConstant = 0.68; // Fast, punchy transient response for instant beat dancing
         audioSourceNode.connect(analyser);
         analyser.connect(audioCtx.destination);
       } catch (err) {
@@ -166,29 +533,148 @@
   function renderVisualizer() {
     function draw() {
       animationFrameId = requestAnimationFrame(draw);
-      const width = canvas.width = canvas.parentElement.clientWidth;
-      const height = canvas.height = canvas.parentElement.clientHeight;
+      if (!canvas || !canvas.parentElement) return;
 
-      canvasCtx.clearRect(0, 0, width, height);
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const displayW = Math.max(10, Math.round(rect.width));
+      const displayH = Math.max(10, Math.round(rect.height));
 
-      const cx = width / 2;
-      const cy = height / 2;
-      const albumBox = document.getElementById('albumArtworkBox');
-      const boxRadius = albumBox ? (albumBox.offsetWidth / 2) : 85;
-      const innerRadius = boxRadius + 8;
-      const maxExtension = Math.max(25, Math.min(cx, cy) - innerRadius - 10);
+      if (canvas.width !== displayW * dpr || canvas.height !== displayH * dpr) {
+        canvas.width = displayW * dpr;
+        canvas.height = displayH * dpr;
+      }
+      canvasCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       const now = performance.now();
       const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
       lastFrameTime = now;
 
-      if (!analyser || audio.paused) {
-        // Decay musical state gracefully when paused
-        smoothBassEnergy += (0 - smoothBassEnergy) * 0.08;
-        smoothMidEnergy += (0 - smoothMidEnergy) * 0.08;
-        smoothTrebleEnergy += (0 - smoothTrebleEnergy) * 0.08;
-        rhythmicSwell *= 0.88;
-        flowPhase += 0.8 * dt; // gentle idle drift
+      const isAudioActive = analyser && !audio.paused && audio.currentTime > 0;
+      let spectrumNormalized = null;
+
+      if (isAudioActive) {
+        const bufferLength = analyser.frequencyBinCount;
+        const rawBytes = new Uint8Array(bufferLength);
+        analyser.getByteFrequencyData(rawBytes);
+
+        spectrumNormalized = new Float32Array(bufferLength);
+        for (let i = 0; i < bufferLength; i++) {
+          spectrumNormalized[i] = rawBytes[i] / 255.0;
+        }
+
+        // Sub-Bass & Kick (bins 1-6, ~20-140Hz)
+        let bassSum = 0;
+        for (let b = 1; b <= 6; b++) bassSum += spectrumNormalized[b];
+        const bassVal = bassSum / 6;
+
+        // Snare & Low Mids (bins 7-35, ~160-800Hz)
+        let midSum = 0;
+        for (let m = 7; m <= 35; m++) midSum += spectrumNormalized[m];
+        const midVal = midSum / 29;
+
+        // Treble & Shimmer (bins 36-140, ~850-3200Hz)
+        let trebleSum = 0;
+        for (let tr = 36; tr <= 140; tr++) trebleSum += spectrumNormalized[tr];
+        const trebleVal = trebleSum / 105;
+
+        let totalSum = 0;
+        for (let j = 0; j < 64; j++) totalSum += spectrumNormalized[j];
+        const avgVal = totalSum / 64;
+
+        // 1. Spectral Flux Tracker: Moment-to-moment novelty across all frequencies (chords, vocal onsets, synths)
+        let fluxSum = 0;
+        const fluxMaxBin = Math.min(180, bufferLength);
+        if (prevSpectrumNormalized && prevSpectrumNormalized.length === bufferLength) {
+          for (let b = 1; b < fluxMaxBin; b++) {
+            const diff = spectrumNormalized[b] - prevSpectrumNormalized[b];
+            if (diff > 0) fluxSum += diff;
+          }
+        }
+        if (!prevSpectrumNormalized || prevSpectrumNormalized.length !== bufferLength) {
+          prevSpectrumNormalized = new Float32Array(bufferLength);
+        }
+        prevSpectrumNormalized.set(spectrumNormalized);
+
+        const rawFlux = fluxSum / 14.0;
+        const instantFlux = Math.min(1.0, rawFlux);
+        smoothFluxEnergy += (instantFlux - smoothFluxEnergy) * 0.45;
+
+        // 2. Dynamic Kick Detection (Sub-bass transient spikes)
+        bassHistoryAvg = bassHistoryAvg * 0.91 + bassVal * 0.09;
+        const bassDelta = bassVal - lastBassVal;
+        lastBassVal = bassVal;
+
+        let isBeatKick = false;
+        let kickForce = 0;
+        if ((bassDelta > 0.052 || bassVal > bassHistoryAvg * 1.28 + 0.09) && (now - lastKickTriggerTime > 140)) {
+          isBeatKick = true;
+          lastKickTriggerTime = now;
+          kickForce = Math.min(1.0, Math.max(0.5, (bassDelta * 4.2) + (bassVal * 0.75)));
+          systemBeatKick = Math.min(1.0, systemBeatKick + kickForce);
+        } else {
+          systemBeatKick *= 0.82;
+          if (systemBeatKick < 0.005) systemBeatKick = 0;
+        }
+
+        // 3. Snare & Clap Detection (Mid-frequency transient bursts)
+        midHistoryAvg = midHistoryAvg * 0.90 + midVal * 0.10;
+        const midDelta = midVal - lastMidVal;
+        lastMidVal = midVal;
+
+        let isBeatSnare = false;
+        let snareForce = 0;
+        if ((midDelta > 0.048 || midVal > midHistoryAvg * 1.32 + 0.07) && (now - lastSnareTriggerTime > 150)) {
+          isBeatSnare = true;
+          lastSnareTriggerTime = now;
+          snareForce = Math.min(1.0, Math.max(0.4, (midDelta * 4.0) + (midVal * 0.6)));
+          systemBeatSnare = Math.min(1.0, systemBeatSnare + snareForce);
+        } else {
+          systemBeatSnare *= 0.78;
+          if (systemBeatSnare < 0.005) systemBeatSnare = 0;
+        }
+
+        // 4. Hi-Hat / High Percussion Detection (Treble clicks & ticks)
+        trebleHistoryAvg = trebleHistoryAvg * 0.90 + trebleVal * 0.10;
+        const trebleDelta = trebleVal - lastTrebleVal;
+        lastTrebleVal = trebleVal;
+
+        let isBeatHihat = false;
+        let hihatForce = 0;
+        if ((trebleDelta > 0.032 || trebleVal > trebleHistoryAvg * 1.28 + 0.05) && (now - lastHihatTriggerTime > 90)) {
+          isBeatHihat = true;
+          lastHihatTriggerTime = now;
+          hihatForce = Math.min(1.0, Math.max(0.3, (trebleDelta * 4.5) + (trebleVal * 0.5)));
+          systemBeatHihat = Math.min(1.0, systemBeatHihat + hihatForce);
+        } else {
+          systemBeatHihat *= 0.74;
+          if (systemBeatHihat < 0.005) systemBeatHihat = 0;
+        }
+
+        smoothBassEnergy += (bassVal - smoothBassEnergy) * 0.35;
+        smoothMidEnergy += (midVal - smoothMidEnergy) * 0.28;
+        smoothTrebleEnergy += (trebleVal - smoothTrebleEnergy) * 0.30;
+
+        // 5. Continuous Rhythmic Groove Phase (sway, bob, tilt linked to song tempo)
+        rhythmicPhase += (2.4 + smoothBassEnergy * 5.5 + smoothFluxEnergy * 3.5) * dt;
+
+        musicalState.isPlaying = true;
+        musicalState.bass = smoothBassEnergy;
+        musicalState.mids = smoothMidEnergy;
+        musicalState.treble = smoothTrebleEnergy;
+        musicalState.avg = avgVal;
+        musicalState.beatStage = (smoothBassEnergy > 0.55 || avgVal > 0.45) ? 3 : ((smoothBassEnergy > 0.28 || avgVal > 0.22) ? 2 : 1);
+        musicalState.beatKick = isBeatKick;
+        musicalState.kickIntensity = kickForce || systemBeatKick;
+        musicalState.time = now;
+      } else {
+        systemBeatKick *= 0.80;
+        systemBeatSnare *= 0.78;
+        systemBeatHihat *= 0.74;
+        smoothFluxEnergy *= 0.80;
+        smoothBassEnergy *= 0.80;
+        smoothMidEnergy *= 0.80;
+        smoothTrebleEnergy *= 0.80;
 
         musicalState.isPlaying = false;
         musicalState.bass = smoothBassEnergy;
@@ -199,300 +685,49 @@
         musicalState.beatKick = false;
         musicalState.kickIntensity = 0;
 
-        // Idle Radial Breathing Halo
-        const t = Date.now() / 700;
-        for (let i = 0; i < RADIAL_BAR_COUNT; i++) {
-          const angle = (i / RADIAL_BAR_COUNT) * Math.PI * 2 - Math.PI / 2;
-          const w1 = Math.sin(t * 1.4 + angle * 4);
-          const w2 = Math.cos(t * 2.0 - angle * 2);
-          const idleLen = Math.max(6, ((w1 + w2) * 0.5 * 0.5 + 0.5) * 24 + 8);
-
-          const cosA = Math.cos(angle);
-          const sinA = Math.sin(angle);
-
-          const x1 = cx + cosA * innerRadius;
-          const y1 = cy + sinA * innerRadius;
-          const x2 = cx + cosA * (innerRadius + idleLen);
-          const y2 = cy + sinA * (innerRadius + idleLen);
-
-          canvasCtx.beginPath();
-          canvasCtx.moveTo(x1, y1);
-          canvasCtx.lineTo(x2, y2);
-          canvasCtx.strokeStyle = 'rgba(255, 0, 0, 0.35)';
-          canvasCtx.lineWidth = 2.4;
-          canvasCtx.lineCap = 'round';
-          canvasCtx.stroke();
-        }
-
-        if (albumBox) {
-          albumBox.style.transform = 'scale(1)';
-          albumBox.style.boxShadow = '0 0 35px rgba(0, 0, 0, 0.95)';
-        }
-        return;
+        spectrumNormalized = new Float32Array(0);
       }
 
-      // Audio playing - extract frequency spectrum
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      analyser.getByteFrequencyData(dataArray);
+      // Propagate live CSS custom properties to document root for full system dancing!
+      const rootStyle = document.documentElement.style;
+      const currentTheme = YUE_THEMES[currentThemeIdx];
 
-      // Measure Bass (bins 1-5), Mids (bins 6-24), Treble (bins 25-64) with high-damping smoothing
-      const bassRaw = (dataArray[1] + dataArray[2] + dataArray[3] + dataArray[4] + dataArray[5]) / (5 * 255);
-      smoothBassEnergy += (bassRaw - smoothBassEnergy) * 0.09;
+      const beatSway = isAudioActive ? (Math.sin(rhythmicPhase) * (0.8 + smoothBassEnergy * 1.8 + systemBeatKick * 2.2)).toFixed(3) : "0";
+      const beatBob = isAudioActive ? (Math.abs(Math.sin(rhythmicPhase * 1.5)) * (smoothBassEnergy * 5.0 + systemBeatKick * 7.5 + systemBeatSnare * 4.0)).toFixed(3) : "0";
+      const beatTilt = isAudioActive ? (Math.cos(rhythmicPhase) * (0.8 + systemBeatKick * 1.6 + systemBeatSnare * 1.2)).toFixed(3) : "0";
 
-      let midSum = 0;
-      for (let m = 6; m <= 24; m++) midSum += dataArray[m];
-      const midRaw = midSum / (19 * 255);
-      smoothMidEnergy += (midRaw - smoothMidEnergy) * 0.09;
+      rootStyle.setProperty('--beat-kick', systemBeatKick.toFixed(3));
+      rootStyle.setProperty('--beat-snare', systemBeatSnare.toFixed(3));
+      rootStyle.setProperty('--beat-hihat', systemBeatHihat.toFixed(3));
+      rootStyle.setProperty('--beat-flux', smoothFluxEnergy.toFixed(3));
+      rootStyle.setProperty('--beat-bass', smoothBassEnergy.toFixed(3));
+      rootStyle.setProperty('--beat-mids', smoothMidEnergy.toFixed(3));
+      rootStyle.setProperty('--beat-treble', smoothTrebleEnergy.toFixed(3));
+      rootStyle.setProperty('--beat-sway', beatSway);
+      rootStyle.setProperty('--beat-bob', beatBob);
+      rootStyle.setProperty('--beat-tilt', beatTilt);
+      rootStyle.setProperty('--theme-rgb', `${currentTheme.r}, ${currentTheme.g}, ${currentTheme.b}`);
+      rootStyle.setProperty('--theme-color', currentTheme.hex);
 
-      let trebleSum = 0;
-      for (let tr = 25; tr <= 64; tr++) trebleSum += dataArray[tr];
-      const trebleRaw = trebleSum / (40 * 255);
-      smoothTrebleEnergy += (trebleRaw - smoothTrebleEnergy) * 0.10;
+      // Update Yue Engine with external kick force, bass, flux, and rhythmic groove
+      yueEngine.update(dt, spectrumNormalized, 1280.0, 720.0, systemBeatKick, smoothBassEnergy, smoothFluxEnergy, rhythmicPhase);
 
-      let sumEnergy = 0;
-      for (let j = 0; j < 48; j++) sumEnergy += dataArray[j];
-      const avgEnergy = sumEnergy / (48 * 255);
-
-      // Controlled multi-stage beat detection with smooth continuous interpolation
-      let beatStage = 1;
-      let targetStageMult = 0.72;
-      let peakHoldDuration = 0;
-
-      if (avgEnergy >= 0.52 || smoothBassEnergy >= 0.62) {
-        beatStage = 3;
-        targetStageMult = 1.15; // Controlled expansion on major drops
-        peakHoldDuration = 12;
-      } else if (avgEnergy >= 0.28 || smoothBassEnergy >= 0.38) {
-        beatStage = 2;
-        targetStageMult = 0.92; // Calm, steady groove
-        peakHoldDuration = 6;
-      }
-
-      // Smooth camera-stabilized stage transition (prevents abrupt jumping when passing thresholds)
-      smoothStageMult += (targetStageMult - smoothStageMult) * 0.05;
-
-      // Rhythmic Beat Kick Detection (requires genuine rising edge & composed cooldown)
-      const bassDelta = bassRaw - lastBassRaw;
-      lastBassRaw = bassRaw;
-
-      let isBeatKick = false;
-      let kickIntensity = 0;
-      if (bassDelta > 0.18 && (now - lastBeatKickTime) > 360) {
-        isBeatKick = true;
-        kickIntensity = Math.min(1.0, bassDelta * 2.5);
-        lastBeatKickTime = now;
-      }
-
-      // Composed, gentle rhythmic flow dynamics
-      const flowSpeed = 1.2 + smoothBassEnergy * 2.2 + smoothMidEnergy * 1.5;
-      flowPhase += flowSpeed * dt;
-
-      if (isBeatKick) {
-        rhythmicSwell = Math.min(0.40, rhythmicSwell + 0.18 + kickIntensity * 0.15);
-      } else {
-        rhythmicSwell *= 0.95;
-      }
-
-      // Sync into shared musical state
-      musicalState.isPlaying = true;
-      musicalState.bass = smoothBassEnergy;
-      musicalState.mids = smoothMidEnergy;
-      musicalState.treble = smoothTrebleEnergy;
-      musicalState.avg = avgEnergy;
-      musicalState.beatStage = beatStage;
-      musicalState.beatKick = isBeatKick;
-      musicalState.kickIntensity = kickIntensity;
-      musicalState.time = now;
-
-      const baseInner = innerRadius;
-
-      // Controlled Beat Scaling & Glow on Center Album Artwork (calm, subtle breath)
-      if (albumBox) {
-        const discScale = 1.0 + smoothBassEnergy * 0.025 + rhythmicSwell * 0.015;
-        const glowSpread = 25 + smoothBassEnergy * 22 + rhythmicSwell * 12;
-        const glowAlpha = 0.26 + smoothBassEnergy * 0.22 + rhythmicSwell * 0.12;
-
-        albumBox.style.transform = `scale(${discScale})`;
-        albumBox.style.boxShadow = `0 0 ${glowSpread}px rgba(255, 20, 60, ${glowAlpha}), 0 0 ${glowSpread * 1.6}px rgba(99, 102, 241, ${glowAlpha * 0.40})`;
-
-        if (beatStage === 3 && smoothBassEnergy > 0.78 && shockwaveAlpha <= 0.05) {
-          shockwaveRadius = baseInner;
-          shockwaveAlpha = 0.70;
-        }
-      }
-
-      // Draw expanding beat shockwave ring inside showcase only on true climaxes
-      if (shockwaveAlpha > 0.02) {
-        canvasCtx.beginPath();
-        canvasCtx.arc(cx, cy, shockwaveRadius, 0, Math.PI * 2);
-        canvasCtx.strokeStyle = `rgba(255, 50, 75, ${shockwaveAlpha})`;
-        canvasCtx.lineWidth = 2.0;
-        canvasCtx.stroke();
-        shockwaveRadius += 3.5 + smoothBassEnergy * 1.5;
-        shockwaveAlpha *= 0.92;
-      }
-
-      // 1. Draw Audio-Reactive Glowing Base Track Ring (stable and serene)
-      const currentInnerCenter = baseInner + (smoothBassEnergy * 3.0);
-      canvasCtx.beginPath();
-      canvasCtx.arc(cx, cy, currentInnerCenter, 0, Math.PI * 2);
-      canvasCtx.strokeStyle = `rgba(255, 30, 60, ${0.22 + smoothBassEnergy * 0.25})`;
-      canvasCtx.lineWidth = 1.6 + smoothBassEnergy * 0.8;
-      canvasCtx.stroke();
-
-      // 2. Draw Rotating Outer Celestial Orbit Ring
-      const orbitRadius = baseInner + maxExtension * (0.68 + smoothBassEnergy * 0.18);
-      canvasCtx.beginPath();
-      canvasCtx.arc(cx, cy, orbitRadius, 0, Math.PI * 2);
-      canvasCtx.strokeStyle = `rgba(99, 102, 241, ${0.09 + smoothMidEnergy * 0.16})`;
-      canvasCtx.lineWidth = 1.1;
-      canvasCtx.lineDashOffset = -flowPhase * 10;
-      canvasCtx.setLineDash([7, 12]);
-      canvasCtx.stroke();
-      canvasCtx.setLineDash([]);
-
-      // Map 48 logarithmic bands mirrored symmetrically around 96 radial lines
-      const halfCount = RADIAL_BAR_COUNT / 2;
-      const tips = new Array(RADIAL_BAR_COUNT);
-
-      for (let i = 0; i < RADIAL_BAR_COUNT; i++) {
-        // Symmetrical mirroring: left and right halves mirror from bottom to top
-        const symIdx = i < halfCount ? (halfCount - 1 - i) : (i - halfCount);
-        const norm = symIdx / (halfCount - 1);
-        const binIdx = Math.pow(norm, 2.0) * (bufferLength - 4) + 1;
-        const low = Math.floor(binIdx);
-        const high = Math.min(low + 1, bufferLength - 1);
-        const frac = binIdx - low;
-        let val = dataArray[low] * (1 - frac) + dataArray[high] * frac;
-
-        // Controlled treble curve with smooth stage multiplier
-        const boost = (1.0 + Math.pow(norm, 0.6) * 0.4) * smoothStageMult;
-        val = Math.min(255, val * boost);
-
-        // Power curve (1.25) for rich, stable dynamic range
-        const normalizedPower = Math.pow(val / 255, 1.25);
-
-        // Continuous Gentle Rhythmic Flowing Harmonics (soft 4-6px subtle undulation)
-        const angle = (i / RADIAL_BAR_COUNT) * Math.PI * 2 - Math.PI / 2;
-        const wave1 = Math.sin(angle * 3 + flowPhase * 0.9) * (smoothBassEnergy * 5.0 + smoothMidEnergy * 3.0);
-        const wave2 = Math.cos(angle * 5 - flowPhase * 1.1) * (smoothBassEnergy * 3.5 + smoothTrebleEnergy * 2.5);
-        const rhythmicFlow = wave1 + wave2;
-
-        const beatSurge = 1.0 + smoothBassEnergy * 0.15 + rhythmicSwell * 0.10;
-        const targetLen = Math.max(6, (normalizedPower * maxExtension * beatSurge) + rhythmicFlow);
-
-        // Silky, composed attack & decay (eliminates twitchy/spastic jumping)
-        if (targetLen >= radialHeights[i]) {
-          radialHeights[i] += (targetLen - radialHeights[i]) * 0.20; // very smooth, gentle rise
-          if (targetLen > maxExtension * 0.55 && beatStage >= 2) {
-            radialPeakHolds[i] = peakHoldDuration;
-          }
-        } else {
-          if (radialPeakHolds[i] > 0) {
-            radialPeakHolds[i]--;
-            radialHeights[i] = Math.max(targetLen, radialHeights[i] * 0.992);
-          } else {
-            radialHeights[i] += (targetLen - radialHeights[i]) * 0.08; // smooth, steady fall
-          }
-        }
-
-        // Peak dots physics (gentle floating crest)
-        if (radialHeights[i] >= radialPeaks[i]) {
-          radialPeaks[i] = radialHeights[i];
-          radialPeakSpeeds[i] = 0;
-        } else {
-          radialPeakSpeeds[i] += 0.20;
-          radialPeaks[i] = Math.max(0, radialPeaks[i] - radialPeakSpeeds[i]);
-        }
-
-        // Base circle remains steady and circular (no high-frequency distortion)
-        const currentInner = baseInner + (smoothBassEnergy * 3.0);
-
-        const cosA = Math.cos(angle);
-        const sinA = Math.sin(angle);
-
-        const x1 = cx + cosA * currentInner;
-        const y1 = cy + sinA * currentInner;
-        const x2 = cx + cosA * (currentInner + radialHeights[i]);
-        const y2 = cy + sinA * (currentInner + radialHeights[i]);
-
-        tips[i] = { x: x2, y: y2 };
-
-        // Dynamic Line Gradient (shifts smoothly with beat stage)
-        const lineGrad = canvasCtx.createLinearGradient(x1, y1, x2, y2);
-        if (beatStage === 3) {
-          lineGrad.addColorStop(0, '#e11d48');   // rose
-          lineGrad.addColorStop(0.35, '#ff0033'); // amra crimson
-          lineGrad.addColorStop(0.75, '#ff3366'); // neon magenta
-          lineGrad.addColorStop(1.0, '#ffcc00');  // hot starlight gold
-        } else if (beatStage === 2) {
-          lineGrad.addColorStop(0, '#cc0022');
-          lineGrad.addColorStop(0.4, '#ff0033');
-          lineGrad.addColorStop(0.8, '#ff5533');
-          lineGrad.addColorStop(1.0, '#ffaa22');  // bright warm amber
-        } else {
-          lineGrad.addColorStop(0, '#990018');
-          lineGrad.addColorStop(0.5, '#ee002e');
-          lineGrad.addColorStop(1.0, '#ff4422');
-        }
-
-        // Render Radial Ray with steady width
-        canvasCtx.beginPath();
-        canvasCtx.moveTo(x1, y1);
-        canvasCtx.lineTo(x2, y2);
-        canvasCtx.strokeStyle = lineGrad;
-        canvasCtx.lineWidth = (beatStage === 3 ? 2.8 : 2.5) + smoothBassEnergy * 0.4;
-        canvasCtx.lineCap = 'round';
-        canvasCtx.stroke();
-
-        // Render Floating Glowing Peak Orb
-        if (radialPeaks[i] > 7) {
-          const peakDist = currentInner + radialPeaks[i] + 3.6;
-          const px = cx + cosA * peakDist;
-          const py = cy + sinA * peakDist;
-
-          canvasCtx.beginPath();
-          canvasCtx.arc(px, py, beatStage === 3 ? (2.4 + smoothBassEnergy * 0.5) : 1.8, 0, Math.PI * 2);
-          canvasCtx.fillStyle = beatStage === 3 ? '#fff5cc' : (beatStage === 2 ? '#ffeedd' : '#ffe0cc');
-          canvasCtx.shadowColor = beatStage === 3 ? '#ffaa00' : '#ff2200';
-          canvasCtx.shadowBlur = beatStage === 3 ? 8 : (beatStage === 2 ? 5 : 3);
-          canvasCtx.fill();
-          canvasCtx.shadowBlur = 0;
-        }
-      }
-
-      // 3. Draw Fluid Rhythmic Contour Ribbon connecting the line tips in a glowing wave
-      canvasCtx.beginPath();
-      for (let k = 0; k <= RADIAL_BAR_COUNT; k++) {
-        const idx = k % RADIAL_BAR_COUNT;
-        const pt = tips[idx];
-        if (k === 0) {
-          canvasCtx.moveTo(pt.x, pt.y);
-        } else {
-          const prevIdx = (k - 1) % RADIAL_BAR_COUNT;
-          const prevPt = tips[prevIdx];
-          const midX = (prevPt.x + pt.x) / 2;
-          const midY = (prevPt.y + pt.y) / 2;
-          canvasCtx.quadraticCurveTo(prevPt.x, prevPt.y, midX, midY);
-        }
-      }
-      canvasCtx.closePath();
-
-      const ribbonAlpha = 0.20 + smoothBassEnergy * 0.22 + rhythmicSwell * 0.15;
-      canvasCtx.strokeStyle = beatStage === 3 
-        ? `rgba(255, 204, 0, ${ribbonAlpha})` 
-        : (beatStage === 2 ? `rgba(255, 68, 102, ${ribbonAlpha})` : `rgba(255, 51, 75, ${ribbonAlpha * 0.70})`);
-      canvasCtx.lineWidth = 1.4 + smoothBassEnergy * 0.8;
-      canvasCtx.shadowColor = beatStage === 3 ? '#ffaa00' : '#ff0033';
-      canvasCtx.shadowBlur = beatStage === 3 ? 9 : 5;
-      canvasCtx.stroke();
-      canvasCtx.shadowBlur = 0;
+      // Render Yue Engine
+      yueEngine.draw(canvasCtx, currentTheme, albumArtImg, displayW, displayH, 1280.0, 720.0, systemBeatKick, smoothFluxEnergy, rhythmicPhase);
     }
 
     if (!animationFrameId) {
       draw();
     }
+  }
+
+  // Auto-start visualizer immediately so idle state is visible on page load
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      renderVisualizer();
+    });
+  } else {
+    renderVisualizer();
   }
 
   // Update YouTube style Play/Pause button
@@ -576,6 +811,19 @@
     }
     if (params.get('pin')) {
       joinPasscodeInput.value = params.get('pin');
+    }
+    if (params.get('nick')) {
+      joinNicknameInput.value = params.get('nick');
+    }
+    if (params.get('auto') === '1' && joinRoomIdInput.value && joinPasscodeInput.value) {
+      if (!joinNicknameInput.value) joinNicknameInput.value = 'Listener';
+      setTimeout(() => {
+        if (joinForm && typeof joinForm.requestSubmit === 'function') {
+          joinForm.requestSubmit();
+        } else if (joinSubmitBtn) {
+          joinSubmitBtn.click();
+        }
+      }, 150);
     }
   }
   checkUrlForRoom();
@@ -794,22 +1042,26 @@
       trackTitle.textContent = state.current_track.title;
       trackSourceBadge.style.display = 'inline-flex';
 
+      if (yueTrackName) {
+        yueTrackName.textContent = state.current_track.title;
+      }
+
       if (state.current_track.source === 'youtube') {
         trackSourceIcon.textContent = '▶️';
         trackSourceName.textContent = 'YouTube';
         trackArtist.textContent = 'YouTube Audio';
 
-        // Load YouTube HQ Thumbnail
+        // Load YouTube HQ Thumbnail for center circle
         albumArtImg.src = `https://img.youtube.com/vi/${state.current_track.id}/hqdefault.jpg`;
         albumArtImg.style.display = 'block';
-        albumArtPlaceholder.style.display = 'none';
+        if (albumArtPlaceholder) albumArtPlaceholder.style.display = 'none';
       } else {
         trackSourceIcon.textContent = '📁';
         trackSourceName.textContent = 'Local File';
         trackArtist.textContent = 'Local Audio Track';
 
-        albumArtImg.style.display = 'none';
-        albumArtPlaceholder.style.display = 'flex';
+        albumArtImg.removeAttribute('src');
+        if (albumArtPlaceholder) albumArtPlaceholder.style.display = 'flex';
       }
 
       // Check if audio src needs updating
@@ -824,10 +1076,13 @@
       trackTitle.textContent = 'No track loaded yet';
       trackArtist.textContent = 'Select an audio file or paste YouTube link below';
       trackSourceBadge.style.display = 'none';
-      albumArtImg.style.display = 'none';
-      albumArtPlaceholder.style.display = 'flex';
+      if (yueTrackName) {
+        yueTrackName.textContent = 'No track selected';
+      }
+      albumArtImg.removeAttribute('src');
+      if (albumArtPlaceholder) albumArtPlaceholder.style.display = 'flex';
       updatePlayButtonIcon(false);
-      vinylDisc.classList.remove('spinning');
+      if (vinylDisc) vinylDisc.classList.remove('spinning');
       renderQueue([], 0, null);
       return;
     }
@@ -838,9 +1093,9 @@
     if (state.is_playing) {
       const elapsedSeconds = (now - state.server_time_ms) / 1000;
       expectedPosition += Math.max(0, elapsedSeconds);
-      vinylDisc.classList.add('spinning');
+      if (vinylDisc) vinylDisc.classList.add('spinning');
     } else {
-      vinylDisc.classList.remove('spinning');
+      if (vinylDisc) vinylDisc.classList.remove('spinning');
     }
 
     updatePlayButtonIcon(state.is_playing);
@@ -1371,11 +1626,11 @@
       }
     }
 
-    // Helper: Screen position of Center Album Disc
+    // Helper: Screen position of Center Visualizer Stage
     function getAlbumCenter() {
-      const albumBox = document.getElementById('albumArtworkBox');
-      if (albumBox) {
-        const rect = albumBox.getBoundingClientRect();
+      const stage = document.getElementById('albumShowcase');
+      if (stage) {
+        const rect = stage.getBoundingClientRect();
         return {
           x: rect.left + rect.width / 2,
           y: rect.top + rect.height / 2
@@ -1384,29 +1639,41 @@
       return { x: width / 2, y: height / 2 };
     }
 
-    // Music Beat Wave Emission from Album Center
+    // Music Beat Wave Emission from Visualizer Stage Center
     function spawnMusicBeatWave(stage, intensity) {
       if (ripples.length >= MAX_RIPPLES) ripples.shift();
       const center = getAlbumCenter();
 
-      let color;
-      let style = 'fluid';
-      let maxRadius = Math.max(width, height) * 0.45;
-      let speed = 2.4 + intensity * 1.6;
-      let alpha = 0.28 + intensity * 0.2;
+      const currentTheme = YUE_THEMES[currentThemeIdx];
+      const color = { r: currentTheme.r, g: currentTheme.g, b: currentTheme.b };
+      const maxRadius = Math.max(width, height) * (0.50 + intensity * 0.40);
+      const speed = 3.4 + intensity * 3.0;
+      const alpha = 0.35 + intensity * 0.35;
 
-      if (stage === 3) {
-        // Drop / Heavy Kick: dramatic blooming lotus or organic shockwave
-        color = Math.random() < 0.5 ? PALETTES[5] : PALETTES[0]; // gold or crimson
-        style = Math.random() < 0.6 ? 'bloom' : 'organic';
-        maxRadius = Math.max(width, height) * 0.65;
-        speed = 3.6 + intensity * 2.0;
-        alpha = 0.42;
+      ripples.push({
+        x: center.x,
+        y: center.y,
+        radius: 65,
+        maxRadius,
+        speed,
+        alpha,
+        color,
+        style: 'organic',
+        seed: Math.random() * 200,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.02,
+        vx: 0,
+        vy: 0,
+        isClick: false,
+        isMusicBeat: true
+      });
 
-        // Radiate 6-8 outward sparks from disc rim
-        for (let k = 0; k < 6; k++) {
-          const angle = (k / 6) * Math.PI * 2 + Math.random() * 0.3;
-          const force = 2.0 + Math.random() * 2.5;
+      // Radiate outward sparks from stage on heavy kicks
+      if (intensity > 0.35) {
+        const sparkCount = Math.min(10, Math.floor(4 + intensity * 6));
+        for (let k = 0; k < sparkCount; k++) {
+          const angle = (k / sparkCount) * Math.PI * 2 + Math.random() * 0.3;
+          const force = 2.4 + Math.random() * 3.6;
           if (stars.length < MAX_STARS) {
             stars.push({
               x: center.x + Math.cos(angle) * 75,
@@ -1414,7 +1681,7 @@
               vx: Math.cos(angle) * force,
               vy: Math.sin(angle) * force,
               size: Math.random() * 2.2 + 1.2,
-              alpha: 0.8,
+              alpha: 0.85,
               maxLife: Math.random() * 35 + 25,
               life: 0,
               color,
@@ -1422,39 +1689,7 @@
             });
           }
         }
-      } else if (stage === 2) {
-        // Melodic groove: cyber cyan or lotus rose
-        color = Math.random() < 0.5 ? PALETTES[2] : PALETTES[3]; // cyan or rose
-        style = 'organic';
-        maxRadius = Math.max(width, height) * 0.48;
-        speed = 2.6 + intensity * 1.2;
-        alpha = 0.30;
-      } else {
-        // Gentle groove: spokenguide indigo or cosmic violet
-        color = Math.random() < 0.5 ? PALETTES[1] : PALETTES[4]; // indigo or violet
-        style = 'fluid';
-        maxRadius = Math.max(width, height) * 0.35;
-        speed = 2.0;
-        alpha = 0.22;
       }
-
-      ripples.push({
-        x: center.x,
-        y: center.y,
-        radius: 75,
-        maxRadius,
-        speed,
-        alpha,
-        color,
-        style,
-        seed: Math.random() * 200,
-        rotation: Math.random() * Math.PI * 2,
-        rotationSpeed: (Math.random() - 0.5) * 0.015,
-        vx: 0,
-        vy: 0,
-        isClick: false,
-        isMusicBeat: true
-      });
     }
 
     // Pointer movement tracking
@@ -1548,13 +1783,13 @@
       const isPlaying = musicalState.isPlaying;
       const musicBoost = musicalState.bass;
 
-      // Trigger Beat Wave on fresh musical beat kick (calm, rare drop pulses)
+      // Trigger Beat Wave on fresh musical beat kick (energetic drops & punches)
       if (isPlaying && musicalState.beatKick && musicalState.time !== lastProcessedBeatTime) {
         lastProcessedBeatTime = musicalState.time;
         spawnMusicBeatWave(musicalState.beatStage, musicalState.kickIntensity);
-        // Gentle buoyant lift on dancing embers
+        // Buoyant energetic lift on dancing embers
         for (let i = 0; i < celestialEmbers.length; i++) {
-          celestialEmbers[i].lift = Math.min(8, celestialEmbers[i].lift + (1.5 + Math.random() * 2.0) * musicalState.kickIntensity);
+          celestialEmbers[i].lift = Math.min(18, celestialEmbers[i].lift + (3.0 + Math.random() * 4.5) * musicalState.kickIntensity);
         }
       }
 
@@ -1590,7 +1825,7 @@
       drawRhythmicRibbon(0.72, PALETTES[2], PALETTES[1], 0.0025, 0.8, 1.0); // Cyan & Indigo
       drawRhythmicRibbon(0.85, PALETTES[0], PALETTES[3], 0.0032, -0.7, 0.85); // Crimson & Rose
 
-      // 4. Render Dancing Celestial Embers (composed, gentle rhythmic sway)
+      // 4. Render Dancing Celestial Embers (vivid rhythmic dancing with bass & mids)
       for (let i = 0; i < celestialEmbers.length; i++) {
         const ember = celestialEmbers[i];
         ember.x += ember.vx;
@@ -1601,16 +1836,16 @@
         if (ember.y < -20) ember.y = height + 20;
         if (ember.y > height + 20) ember.y = -20;
 
-        // Controlled rhythmic dancing math
+        // Vivid rhythmic dancing math
         const bob = isPlaying
-          ? (Math.sin(t * ember.danceFreq * 2.0 + ember.phase) * (1.0 + musicalState.mids * 2.2) - ember.lift)
+          ? (Math.sin(t * ember.danceFreq * 2.5 + ember.phase) * (2.0 + musicalState.bass * 8.0 + musicalState.mids * 5.0) - ember.lift)
           : Math.sin(t * 0.8 + ember.phase) * 1.5;
 
         const sway = isPlaying
-          ? (Math.cos(t * ember.danceFreq * 1.5 + ember.phase) * (0.8 + musicalState.treble * 1.6))
+          ? (Math.cos(t * ember.danceFreq * 1.8 + ember.phase) * (1.5 + musicalState.treble * 5.0))
           : Math.cos(t * 0.6 + ember.phase) * 1.2;
 
-        ember.lift *= 0.93;
+        ember.lift *= 0.89;
 
         const twinkle = Math.sin(t * 5 + ember.phase) * 0.25 + 0.75;
         const audioGlow = isPlaying ? (1 + musicalState.bass * 0.7 + musicalState.treble * 0.5) : 1;

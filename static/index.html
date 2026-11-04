@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>amra-shunbo - Synchronized Room</title>
-  <link rel="stylesheet" href="/static/style.css?v=18">
+  <link rel="stylesheet" href="/static/style.css?v=24">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='16' fill='%23FF0000'/><circle cx='16' cy='16' r='10' stroke='white' stroke-width='2' fill='none'/><polygon points='13,11 22,16 13,21' fill='white'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -116,20 +116,25 @@
     <!-- Left / Center Section: Now Playing Stage -->
     <section class="ytm-stage">
       <div class="ytm-player-container">
-        <!-- Album Artwork / Visualizer Stage -->
-        <div class="album-showcase">
-          <div class="album-artwork-box" id="albumArtworkBox">
-            <img id="albumArtImg" class="album-art-image" alt="Track Artwork" style="display: none;">
-            <div id="albumArtPlaceholder" class="album-placeholder">
-              <div class="vinyl-disc" id="vinylDisc">
-                <div class="vinyl-label">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="#FF0000">
-                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                  </svg>
-                </div>
-              </div>
-            </div>
+        <!-- Album Artwork / Visualizer Stage (SnowballSH/yue NCS Engine) -->
+        <div class="album-showcase yue-showcase" id="albumShowcase">
+          <!-- Yue Header UI: Track Title Indicator (Matches Yue Top-Left Display) -->
+          <div class="yue-track-indicator" id="yueTrackIndicator">
+            <span class="yue-track-dot" id="yueTrackDot"></span>
+            <span class="yue-track-title" id="yueTrackName">No track selected</span>
           </div>
+
+          <!-- Yue Header UI: Theme Selector (Matches Yue Cycle Theme Button) -->
+          <div class="yue-controls">
+            <button class="yue-theme-btn" id="yueCycleThemeBtn" type="button" title="Cycle visualizer theme (6 official Yue colors)">
+              <span class="yue-theme-swatch" id="yueThemeSwatch"></span>
+              <span id="yueThemeLabel">Theme: Cyan</span>
+            </button>
+          </div>
+
+          <!-- Hidden Image Asset for Center Ring Artwork Extraction -->
+          <img id="albumArtImg" class="album-art-image" alt="Track Artwork" style="display: none;" crossorigin="anonymous">
+
           <!-- Integrated Ambient Audio Spectrum -->
           <div class="visualizer-container">
             <canvas id="visualizerCanvas"></canvas>
@@ -315,6 +320,6 @@
   <audio id="audioPlayer" preload="auto" crossorigin="anonymous"></audio>
 
   <!-- Client Script -->
-  <script src="/static/app.js?v=18"></script>
+  <script src="/static/app.js?v=24"></script>
 </body>
 </html>
