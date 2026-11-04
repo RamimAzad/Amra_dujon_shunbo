@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use base64::Engine;
 use regex::Regex;
 use serde_json::Value;
 use std::path::Path;
@@ -31,6 +32,118 @@ pub fn find_binary(name: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Resolves or instantiates cookies for yt-dlp.
+/// Checks YOUTUBE_COOKIES_FILE, cookies.txt, or populates cookies.txt from environment variables
+/// (e.g. YOUTUBE_COOKIES or COOKIES_CONTENT or COOKIES_BASE64).
+pub async fn resolve_cookies_file() -> Option<String> {
+    // 1. Explicit file path from env
+    if let Ok(path) = std::env::var("YOUTUBE_COOKIES_FILE") {
+        if Path::new(&path).exists() {
+            return Some(path);
+        }
+    }
+
+    // 2. Existing cookies.txt file on disk
+    if Path::new("cookies.txt").exists() {
+        return Some("cookies.txt".to_string());
+    }
+
+    // 3. Raw cookies content or base64 from environment variables (e.g. Railway, Render, Docker)
+    let env_cookies = std::env::var("YOUTUBE_COOKIES")
+        .or_else(|_| std::env::var("COOKIES_CONTENT"))
+        .or_else(|_| std::env::var("COOKIES_TXT"))
+        .or_else(|_| std::env::var("COOKIES_BASE64"))
+        .ok();
+
+    if let Some(content) = env_cookies {
+        let trimmed = content.trim();
+        if !trimmed.is_empty() {
+            let target_path = "cookies.txt";
+            let decoded_content = if trimmed.starts_with("# Netscape")
+                || trimmed.contains('\t')
+                || trimmed.contains("\\n")
+            {
+                trimmed.replace("\\n", "\n")
+            } else if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(trimmed) {
+                String::from_utf8(decoded).unwrap_or_else(|_| trimmed.replace("\\n", "\n"))
+            } else {
+                trimmed.replace("\\n", "\n")
+            };
+
+            if let Err(e) = tokio::fs::write(target_path, decoded_content).await {
+                tracing::warn!("Failed to write cookies from env to {}: {}", target_path, e);
+            } else {
+                tracing::info!("Populated cookies.txt from environment variable successfully.");
+                return Some(target_path.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+/// Resolves custom proxy configuration if set.
+pub fn resolve_proxy() -> Option<String> {
+    std::env::var("YTDLP_PROXY")
+        .or_else(|_| std::env::var("YOUTUBE_PROXY"))
+        .or_else(|_| std::env::var("HTTPS_PROXY"))
+        .or_else(|_| std::env::var("HTTP_PROXY"))
+        .or_else(|_| std::env::var("ALL_PROXY"))
+        .ok()
+        .filter(|p| !p.trim().is_empty())
+}
+
+/// Helper to configure common yt-dlp arguments across single track and playlist extraction.
+fn apply_common_args(cmd: &mut Command, cookies_path: Option<&str>) {
+    // Optional proxy support (e.g. residential proxy to bypass datacenter IP bans)
+    if let Some(proxy) = resolve_proxy() {
+        tracing::info!("Using proxy for yt-dlp: {}", proxy);
+        cmd.arg("--proxy").arg(proxy);
+    }
+
+    // JavaScript runtime for YouTube BotGuard / PO token deciphering
+    if let Some(node_bin) = find_binary("node") {
+        cmd.arg("--js-runtimes").arg(format!("node:{}", node_bin));
+    }
+
+    // Cookies support
+    if let Some(cookies) = cookies_path {
+        tracing::info!("Using cookies for yt-dlp: {}", cookies);
+        cmd.arg("--cookies").arg(cookies);
+    }
+
+    // Extractor arguments & player clients
+    if let Ok(custom_args) = std::env::var("YTDLP_EXTRACTOR_ARGS") {
+        cmd.arg("--extractor-args").arg(custom_args);
+    } else if let Ok(client) = std::env::var("YTDLP_PLAYER_CLIENT") {
+        cmd.arg("--extractor-args").arg(format!("youtube:player_client={}", client));
+    } else if cookies_path.is_none() {
+        // Fallback clients when unauthenticated
+        cmd.arg("--extractor-args").arg("youtube:player_client=ios,mweb,web");
+    }
+
+    cmd.arg("--geo-bypass");
+}
+
+/// Formats yt-dlp error output into actionable messages.
+fn format_ytdlp_error(stderr: &str) -> anyhow::Error {
+    tracing::error!("yt-dlp failed: {}", stderr);
+
+    if stderr.contains("Sign in to confirm you're not a bot") {
+        return anyhow!(
+            "YouTube blocked cloud server IP: 'Sign in to confirm you're not a bot'. \
+            To fix this on Railway: export your YouTube cookies into a cookies.txt file using a browser extension (like 'Get cookies.txt LOCALLY'), then add a 'YOUTUBE_COOKIES' environment variable in your Railway dashboard with the file contents."
+        );
+    }
+
+    let first_error_line = stderr
+        .lines()
+        .find(|line| line.contains("ERROR:"))
+        .unwrap_or("Failed to process YouTube audio.");
+
+    anyhow!("{}", first_error_line)
 }
 
 pub fn extract_video_id(url: &str) -> Option<String> {
@@ -83,29 +196,18 @@ pub async fn extract_youtube_audio(
     };
 
     let output_template = format!("{}/%(id)s.%(ext)s", room_audio_dir.display());
+    let cookies_file = resolve_cookies_file().await;
 
     tracing::info!("Executing one-pass yt-dlp audio extraction for: {}", target_url);
     let mut cmd = Command::new(&ytdlp);
     cmd.arg("--ffmpeg-location").arg(&ffmpeg);
-    // Crucial: bypasses YouTube 429 and "Sign in to confirm you're not a bot" checks
-    cmd.arg("--extractor-args").arg("youtube:player_client=android,ios");
-    cmd.arg("--geo-bypass");
+    apply_common_args(&mut cmd, cookies_file.as_deref());
     cmd.arg("--no-playlist");
     cmd.arg("--print-json");
     cmd.arg("-x");
     cmd.arg("--audio-format").arg("mp3");
     cmd.arg("--audio-quality").arg("0");
     cmd.arg("-o").arg(&output_template);
-
-    // Optional cookies file support
-    if Path::new("cookies.txt").exists() {
-        cmd.arg("--cookies").arg("cookies.txt");
-    }
-
-    if let Some(node_bin) = find_binary("node") {
-        cmd.arg("--js-runtimes").arg(format!("node:{}", node_bin));
-    }
-
     cmd.arg(&target_url);
 
     let output = cmd.output().await.map_err(|e| {
@@ -114,13 +216,7 @@ pub async fn extract_youtube_audio(
 
     if !output.status.success() {
         let err_msg = String::from_utf8_lossy(&output.stderr);
-        tracing::error!("yt-dlp failed: {}", err_msg);
-        // Extract clean error message
-        let first_error_line = err_msg
-            .lines()
-            .find(|line| line.contains("ERROR:"))
-            .unwrap_or("Failed to process YouTube audio.");
-        return Err(anyhow!("{}", first_error_line));
+        return Err(format_ytdlp_error(&err_msg));
     }
 
     let stdout_str = String::from_utf8_lossy(&output.stdout);
@@ -159,21 +255,14 @@ pub async fn extract_youtube_playlist_info(
         anyhow!("'yt-dlp' executable was not found. Please ensure yt-dlp is installed on the host system.")
     })?;
 
+    let cookies_file = resolve_cookies_file().await;
+
     let mut cmd = Command::new(&ytdlp);
     cmd.arg("--flat-playlist");
     cmd.arg("--dump-single-json");
     cmd.arg("--yes-playlist");
     cmd.arg("--playlist-end").arg("50");
-    cmd.arg("--extractor-args").arg("youtube:player_client=android,ios");
-    cmd.arg("--geo-bypass");
-
-    if Path::new("cookies.txt").exists() {
-        cmd.arg("--cookies").arg("cookies.txt");
-    }
-    if let Some(node_bin) = find_binary("node") {
-        cmd.arg("--js-runtimes").arg(format!("node:{}", node_bin));
-    }
-
+    apply_common_args(&mut cmd, cookies_file.as_deref());
     cmd.arg(url);
 
     let output = cmd.output().await.map_err(|e| {
@@ -182,12 +271,7 @@ pub async fn extract_youtube_playlist_info(
 
     if !output.status.success() {
         let err_msg = String::from_utf8_lossy(&output.stderr);
-        tracing::error!("yt-dlp playlist extraction failed: {}", err_msg);
-        let first_error_line = err_msg
-            .lines()
-            .find(|line| line.contains("ERROR:"))
-            .unwrap_or("Failed to process YouTube playlist.");
-        return Err(anyhow!("{}", first_error_line));
+        return Err(format_ytdlp_error(&err_msg));
     }
 
     let stdout_str = String::from_utf8_lossy(&output.stdout);

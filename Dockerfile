@@ -23,11 +23,12 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Install ffmpeg, python3, pip, and yt-dlp
+# Install ffmpeg, python3, pip, nodejs (for yt-dlp JS challenges), and yt-dlp
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     python3 \
     python3-pip \
+    nodejs \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*

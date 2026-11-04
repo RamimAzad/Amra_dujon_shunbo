@@ -32,6 +32,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::fs::create_dir_all(&upload_dir).await?;
     tokio::fs::create_dir_all("static").await?;
 
+    // Check & initialize YouTube cookies if provided via environment variables
+    if let Some(cookie_file) = youtube::resolve_cookies_file().await {
+        tracing::info!("YouTube cookies loaded from: {}", cookie_file);
+    }
+
     let state = AppState::new(upload_dir.clone());
 
     let cors = CorsLayer::new()
