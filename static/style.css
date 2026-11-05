@@ -81,10 +81,9 @@ body {
   overflow: hidden;
   pointer-events: none;
   z-index: 0;
-  transform: translate3d(calc(var(--tilt-x, 0px) + var(--beat-sway, 0) * 5px), calc(var(--tilt-y, 0px) + var(--beat-bob, 0) * -1.8px), 0) scale(calc(1 + var(--beat-kick, 0) * 0.05 + var(--beat-bass, 0) * 0.03 + var(--beat-flux, 0) * 0.025));
   filter: brightness(calc(1 + var(--beat-kick, 0) * 0.45 + var(--beat-bass, 0) * 0.25 + var(--beat-snare, 0) * 0.2));
-  transition: transform 0.04s ease, filter 0.04s ease;
-  will-change: transform, filter;
+  transition: filter 0.04s ease;
+  will-change: filter;
 }
 
 .ambient-orb {
@@ -460,7 +459,7 @@ body {
   gap: 10px;
 }
 
-/* Album Showcase & Yue Visualizer Stage (Dancing to the Beat) */
+/* Album Showcase & Yue Visualizer Stage (Fixed Position with Full Beat Lighting) */
 .album-showcase {
   position: relative;
   width: 100%;
@@ -477,12 +476,8 @@ body {
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9),
               0 0 calc(20px + var(--beat-kick, 0) * 55px + var(--beat-snare, 0) * 30px + var(--beat-flux, 0) * 25px) rgba(var(--theme-rgb, 0, 255, 255), calc(0.1 + var(--beat-kick, 0) * 0.38 + var(--beat-snare, 0) * 0.2)),
               inset 0 0 calc(15px + var(--beat-bass, 0) * 35px + var(--beat-kick, 0) * 20px) rgba(var(--theme-rgb, 0, 255, 255), calc(0.05 + var(--beat-kick, 0) * 0.22));
-  transform: translate3d(calc(var(--beat-sway, 0) * 2.5px), calc(var(--beat-bob, 0) * -0.7px), 0)
-             scale(calc(1 + var(--beat-kick, 0) * 0.028 + var(--beat-flux, 0) * 0.016))
-             rotate(calc(var(--beat-tilt, 0) * 0.25deg));
-  transform-origin: center center;
-  transition: transform 0.035s cubic-bezier(0.1, 0.9, 0.2, 1), box-shadow 0.04s ease, border-color 0.04s ease;
-  will-change: transform, box-shadow, border-color;
+  transition: box-shadow 0.04s ease, border-color 0.04s ease;
+  will-change: box-shadow, border-color;
 }
 
 /* Yue Header UI: Track Title Indicator (Matches SnowballSH/yue Top-Left) */
@@ -504,9 +499,7 @@ body {
               0 0 calc(8px + var(--beat-kick, 0) * 20px + var(--beat-snare, 0) * 12px) rgba(var(--theme-rgb, 0, 255, 255), calc(0.12 + var(--beat-kick, 0) * 0.35));
   pointer-events: none;
   user-select: none;
-  transform: translate3d(calc(var(--beat-sway, 0) * 1.5px), calc(var(--beat-bob, 0) * -0.4px), 0)
-             scale(calc(1 + var(--beat-kick, 0) * 0.022 + var(--beat-snare, 0) * 0.015));
-  transition: transform 0.04s cubic-bezier(0.1, 0.9, 0.2, 1), box-shadow 0.05s ease;
+  transition: box-shadow 0.05s ease, border-color 0.05s ease;
 }
 
 .yue-track-dot {
@@ -558,20 +551,17 @@ body {
   gap: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4),
               0 0 calc(6px + var(--beat-kick, 0) * 18px + var(--beat-flux, 0) * 10px) rgba(var(--theme-rgb, 0, 255, 255), calc(0.1 + var(--beat-kick, 0) * 0.3));
-  transform: translate3d(calc(var(--beat-sway, 0) * -1.2px), calc(var(--beat-bob, 0) * -0.3px), 0)
-             scale(calc(1 + var(--beat-kick, 0) * 0.02 + var(--beat-flux, 0) * 0.015));
-  transition: all 0.05s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: box-shadow 0.05s ease, border-color 0.05s ease, background 0.15s ease;
 }
 
 .yue-theme-btn:hover {
   background: rgba(28, 28, 42, 0.9);
   border-color: rgba(255, 255, 255, 0.3);
-  transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
 }
 
 .yue-theme-btn:active {
-  transform: translateY(1px);
+  background: rgba(35, 35, 52, 0.95);
 }
 
 .yue-theme-swatch {
@@ -584,6 +574,7 @@ body {
   transition: background 0.3s ease, transform 0.04s ease;
   flex-shrink: 0;
 }
+.album-artwork-box {
   position: absolute;
   width: clamp(120px, 16vh, 150px);
   height: clamp(120px, 16vh, 150px);
@@ -686,8 +677,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   text-shadow: 0 0 calc(var(--beat-kick, 0) * 14px + var(--beat-flux, 0) * 8px) rgba(var(--theme-rgb, 0, 255, 255), calc(var(--beat-kick, 0) * 0.45 + var(--beat-flux, 0) * 0.3));
-  transform: translate3d(calc(var(--beat-sway, 0) * 1.2px), 0, 0);
-  transition: transform 0.04s ease, text-shadow 0.04s ease;
+  transition: text-shadow 0.04s ease;
 }
 
 .track-sub-details {
@@ -786,9 +776,6 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 2px 0;
-  transform: translate3d(calc(var(--beat-sway, 0) * 1.2px), calc(var(--beat-bob, 0) * -0.3px), 0)
-             scale(calc(1 + var(--beat-kick, 0) * 0.012 + var(--beat-snare, 0) * 0.008));
-  transition: transform 0.04s ease;
 }
 
 .controls-left {
@@ -810,8 +797,7 @@ body {
   color: var(--ytm-text-primary);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  transform: scale(calc(1 + var(--beat-hihat, 0) * 0.12 + var(--beat-kick, 0) * 0.06));
-  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.04s ease;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .track-nav-btn:hover {
@@ -969,8 +955,7 @@ body {
   background: rgba(var(--theme-rgb, 0, 255, 255), calc(0.1 + var(--beat-kick, 0) * 0.12));
   border-color: rgba(var(--theme-rgb, 0, 255, 255), calc(0.35 + var(--beat-kick, 0) * 0.5 + var(--beat-flux, 0) * 0.25));
   box-shadow: 0 0 calc(10px + var(--beat-kick, 0) * 24px + var(--beat-flux, 0) * 14px) rgba(var(--theme-rgb, 0, 255, 255), calc(0.14 + var(--beat-kick, 0) * 0.35));
-  transform: translate3d(calc(var(--beat-sway, 0) * 1px), 0, 0) scale(calc(1 + var(--beat-kick, 0) * 0.02 + var(--beat-flux, 0) * 0.012));
-  transition: transform 0.04s ease, box-shadow 0.04s ease, border-color 0.04s ease;
+  transition: box-shadow 0.04s ease, border-color 0.04s ease;
 }
 
 .queue-item-idx {
@@ -1072,7 +1057,7 @@ body {
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* YouTube Iconic White Play Button with Beat Dancing Reaction */
+/* YouTube Iconic White Play Button (Fixed Position with Full Beat Lighting) */
 .ytm-play-btn {
   width: 48px;
   height: 48px;
@@ -1086,19 +1071,17 @@ body {
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6),
               0 0 calc(12px + var(--beat-kick, 0) * 36px + var(--beat-snare, 0) * 20px) rgba(var(--theme-rgb, 0, 255, 255), calc(0.25 + var(--beat-kick, 0) * 0.7 + var(--beat-snare, 0) * 0.35));
-  transform: translate3d(0, calc(var(--beat-bob, 0) * -0.6px), 0)
-             scale(calc(1 + var(--beat-kick, 0) * 0.12 + var(--beat-flux, 0) * 0.06));
-  transition: transform 0.035s cubic-bezier(0.1, 0.9, 0.2, 1), box-shadow 0.04s ease;
-  will-change: transform, box-shadow;
+  transition: box-shadow 0.04s ease, border-color 0.04s ease, background 0.15s ease, transform 0.15s ease;
+  will-change: box-shadow, border-color;
 }
 
 .ytm-play-btn:hover {
-  transform: translate3d(0, calc(var(--beat-bob, 0) * -0.6px), 0) scale(calc(1.06 + var(--beat-kick, 0) * 0.12 + var(--beat-flux, 0) * 0.06));
   background: #f0f0f0;
+  transform: scale(1.06);
 }
 
 .ytm-play-btn:active {
-  transform: scale(0.95);
+  transform: scale(0.96);
 }
 
 .ytm-volume-box {

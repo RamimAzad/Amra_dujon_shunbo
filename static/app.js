@@ -214,15 +214,9 @@
       // The exact radius is base + general floating + sharp kick + transient flux boost
       this.radius = this.baseRadius + Math.min(this.smoothedBass * 1.5, this.baseRadius * 0.16) + this.kickPulse * 1.35 + (fluxEnergy || 0) * (this.baseRadius * 0.08);
 
-      // Organic floating offset with groove sway & bounce
-      const floatAmplitude = this.baseRadius * FLOAT_AMPLITUDE_RATIO + Math.min(this.smoothedBass, this.baseRadius * 0.12) * FLOAT_BASS_BOOST_RATIO;
-      const floatSpeed = FLOAT_SPEED_BASE + Math.min(this.smoothedBass, 3.0) * FLOAT_SPEED_BASS_SCALE;
-
-      const grooveSway = Math.sin(rhythmicPhase || (this.time * 2.2)) * (this.baseRadius * 0.025 + externalKick * 6.0);
-      const grooveBob = -Math.abs(Math.sin((rhythmicPhase || (this.time * 2.2)) * 1.5)) * (this.baseRadius * 0.025 + externalKick * 8.0);
-
-      this.offset.x = Math.sin(this.time * 0.7 * floatSpeed) * floatAmplitude + Math.cos(this.time * 1.3 * floatSpeed) * (floatAmplitude * 0.5) + grooveSway;
-      this.offset.y = Math.cos(this.time * 0.9 * floatSpeed) * floatAmplitude + Math.sin(this.time * 1.1 * floatSpeed) * (floatAmplitude * 0.5) + grooveBob;
+      // Fixed centered position without horizontal sway or drifting
+      this.offset.x = 0;
+      this.offset.y = 0;
     }
 
     draw(ctx, center, theme, logoImg, drawScale, kickBoost = 0, fluxBoost = 0, rhythmicPhase = 0) {
@@ -269,12 +263,10 @@
         ctx.fillStyle = '#141414';
         ctx.fillRect(center.x - fitRadius, center.y - fitRadius, fitRadius * 2, fitRadius * 2);
 
-        // Dynamic turntable micro-rotation and kick scaling on the album artwork
-        const discTilt = Math.sin(rhythmicPhase || 0) * 0.035 * (1.0 + kickBoost * 1.2);
+        // Subtle kick scaling on the album artwork centered inside ring (fixed position, no rotational wobble)
         const discScale = 1.0 + kickBoost * 0.04 + (fluxBoost || 0) * 0.025;
 
         ctx.translate(center.x, center.y);
-        ctx.rotate(discTilt);
         ctx.scale(discScale, discScale);
 
         // Aspect fit centered
@@ -688,13 +680,9 @@
         spectrumNormalized = new Float32Array(0);
       }
 
-      // Propagate live CSS custom properties to document root for full system dancing!
+      // Propagate live CSS custom properties to document root for full lighting reactivity (no position shifting)
       const rootStyle = document.documentElement.style;
       const currentTheme = YUE_THEMES[currentThemeIdx];
-
-      const beatSway = isAudioActive ? (Math.sin(rhythmicPhase) * (0.8 + smoothBassEnergy * 1.8 + systemBeatKick * 2.2)).toFixed(3) : "0";
-      const beatBob = isAudioActive ? (Math.abs(Math.sin(rhythmicPhase * 1.5)) * (smoothBassEnergy * 5.0 + systemBeatKick * 7.5 + systemBeatSnare * 4.0)).toFixed(3) : "0";
-      const beatTilt = isAudioActive ? (Math.cos(rhythmicPhase) * (0.8 + systemBeatKick * 1.6 + systemBeatSnare * 1.2)).toFixed(3) : "0";
 
       rootStyle.setProperty('--beat-kick', systemBeatKick.toFixed(3));
       rootStyle.setProperty('--beat-snare', systemBeatSnare.toFixed(3));
@@ -703,9 +691,9 @@
       rootStyle.setProperty('--beat-bass', smoothBassEnergy.toFixed(3));
       rootStyle.setProperty('--beat-mids', smoothMidEnergy.toFixed(3));
       rootStyle.setProperty('--beat-treble', smoothTrebleEnergy.toFixed(3));
-      rootStyle.setProperty('--beat-sway', beatSway);
-      rootStyle.setProperty('--beat-bob', beatBob);
-      rootStyle.setProperty('--beat-tilt', beatTilt);
+      rootStyle.setProperty('--beat-sway', '0');
+      rootStyle.setProperty('--beat-bob', '0');
+      rootStyle.setProperty('--beat-tilt', '0');
       rootStyle.setProperty('--theme-rgb', `${currentTheme.r}, ${currentTheme.g}, ${currentTheme.b}`);
       rootStyle.setProperty('--theme-color', currentTheme.hex);
 
@@ -1817,8 +1805,8 @@
         ambientOrbsEl.style.setProperty('--music-bass', musicalState.bass.toFixed(3));
         ambientOrbsEl.style.setProperty('--music-mids', musicalState.mids.toFixed(3));
         ambientOrbsEl.style.setProperty('--music-treble', musicalState.treble.toFixed(3));
-        ambientOrbsEl.style.setProperty('--tilt-x', (tiltX * 28).toFixed(1) + 'px');
-        ambientOrbsEl.style.setProperty('--tilt-y', (tiltY * 22).toFixed(1) + 'px');
+        ambientOrbsEl.style.setProperty('--tilt-x', '0px');
+        ambientOrbsEl.style.setProperty('--tilt-y', '0px');
       }
 
       // 3. Render Controlled Rhythmic Auroras (Silk Wave Ribbons)
